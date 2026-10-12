@@ -794,17 +794,17 @@ else
     fail "observe_jobs tail skipped: no JOB_ID available"
 fi
 
-# Low-frequency inventory tools stay behind call_runtime_tool rather than
-# consuming direct Adaptive surface slots.
-phase_a_present=1
-for tname in list_project_files list_jobs; do
-    if mcp_tool_present "$tname"; then
-        phase_a_present=0
-        fail "MCP tools/list must keep $tname behind call_runtime_tool"
-    fi
-done
-if [ "$phase_a_present" = "1" ]; then
-    pass "Adaptive Runtime keeps low-frequency inventory tools behind the gateway"
+# Low-frequency project file inventory remains gateway-only. Job identity
+# recovery is now an explicitly selected Adaptive Direct CoreWorkflow tool.
+if mcp_tool_present "list_project_files"; then
+    fail "Adaptive Runtime must keep list_project_files behind call_runtime_tool"
+else
+    pass "Adaptive Runtime keeps list_project_files behind the gateway"
+fi
+if mcp_tool_present "list_jobs"; then
+    pass "Adaptive Runtime exposes canonical direct list_jobs for Job identity recovery"
+else
+    fail "Adaptive Runtime must expose direct list_jobs for Job identity recovery"
 fi
 
 # ----------------------------------------------------------------------------
@@ -1193,7 +1193,7 @@ if output.get("session_id") != session_id:
     errors.append("output.session_id must match returned session_id")
 if not isinstance(output.get("workspace"), dict):
     errors.append("output.workspace must exist")
-if not isinstance(changes.get("read_workspace_changes"), dict):
+if not isinstance(changes.get("show_changes"), dict):
     errors.append("output.changes.show_changes must exist")
 if not isinstance(output.get("hygiene"), dict):
     errors.append("output.hygiene must exist")

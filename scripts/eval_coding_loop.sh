@@ -749,7 +749,7 @@ import sys
 
 data = json.loads(sys.argv[1])
 out = data.get("output") or {}
-changes = ((out.get("changes") or {}).get("read_workspace_changes") or {})
+changes = ((out.get("changes") or {}).get("show_changes") or {})
 files = changes.get("files") or []
 ok = (
     data.get("success") is True
