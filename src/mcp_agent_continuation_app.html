@@ -81,6 +81,9 @@ h1 { margin: 0; font-size: 15px; font-weight: 650; overflow-wrap: anywhere; }
   let timer = null;
   let coordinationInFlight = false;
   let hostInitialized = false;
+  // Explicit Host capability absence blocks automatic text delivery before prepare.
+  // Legacy Hosts with no capability declaration stay unknown for compatibility.
+  let hostTextMessageSupported = null;
   let bindingStarted = false;
   let bindAttempts = 0;
   let recoveryRebinds = 0;
@@ -565,6 +568,8 @@ h1 { margin: 0; font-size: 15px; font-weight: 650; overflow-wrap: anywhere; }
     el("binding").textContent = "Connected";
     if (projection.dispatch_observation === "continuation_consumed") {
       el("status").textContent = "Work resumed successfully";
+    } else if (hostTextMessageSupported === false) {
+      el("status").textContent = "Host text message capability unavailable · Agent Wake preserved";
     } else if (document.hidden) {
       el("status").textContent = projection.wake
         ? "Agent wake pending · waiting for ChatGPT tab to become visible"
@@ -698,7 +703,8 @@ h1 { margin: 0; font-size: 15px; font-weight: 650; overflow-wrap: anywhere; }
   }
 
   async function dispatchWake(wake) {
-    if (document.hidden || dispatchStarted === wake.attempt_id || prepareUncertain === wake.attempt_id) return;
+    if (document.hidden || hostTextMessageSupported === false
+        || dispatchStarted === wake.attempt_id || prepareUncertain === wake.attempt_id) return;
     let automaticMessage;
     try {
       automaticMessage = await prepare(wake);
@@ -815,7 +821,7 @@ h1 { margin: 0; font-size: 15px; font-weight: 650; overflow-wrap: anywhere; }
       if (!projection.wake || projection.dispatch_observation === "continuation_consumed") return;
       // Host transport acceptance from a hidden iframe is not proof that a
       // fresh model turn started. Do not acquire or prepare while hidden.
-      if (document.hidden) return;
+      if (document.hidden || hostTextMessageSupported === false) return;
       const wake = await acquire();
       if (!wake || tornDown) return;
       if (wake.dispatch_observation === "dispatch_accepted" || wake.dispatch_observation === "dispatch_unknown") return;
@@ -1001,8 +1007,13 @@ h1 { margin: 0; font-size: 15px; font-weight: 650; overflow-wrap: anywhere; }
     protocolVersion: APP_PROTOCOL,
     appInfo: { name: "webcodex-agent-continuation-app", title: "WebCodex Agent Continuation", version: "20.0.0" },
     appCapabilities: {},
-  }).then(() => {
+  }).then(result => {
     if (tornDown) return;
+    const capabilities = result?.hostCapabilities;
+    if (capabilities && typeof capabilities === "object" && !Array.isArray(capabilities)) {
+      const text = capabilities.message?.text;
+      hostTextMessageSupported = !!(text && typeof text === "object" && !Array.isArray(text));
+    }
     hostInitialized = true;
     el("status").textContent = "Waiting for Agent connection…";
     notify("ui/notifications/initialized", {});
