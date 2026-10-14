@@ -131,3 +131,27 @@ test("each case must match visibility and actual clock delay, not just a label",
   const tooQuick = edit("job.short.foreground", s => { s.trigger.at = "2026-10-14T10:00:05Z"; });
   assert.ok(assessHostContinuationCase(tooQuick).problems.includes("wrong_delay_window"));
 });
+
+test("nonexistent UTC calendar dates cannot be normalized into valid evidence", () => {
+  for (const at of ["2026-02-30T10:00:00Z", "2026-10-14T24:00:00Z", "2026-13-14T10:00:00Z"]) {
+    const result = assessHostContinuationCase(edit("job.short.foreground", sample => { sample.trigger.at = at; }));
+    assert.ok(result.problems.includes("invalid_utc_timestamp"), at);
+  }
+});
+
+test("malformed case labels cannot echo arbitrary private content", () => {
+  const invalid = edit("job.short.foreground", sample => { sample.caseId = "secret conversation text"; });
+  const result = assessHostContinuationCase(invalid);
+  assert.equal(result.caseId, null);
+  assert.deepEqual(result.problems.includes("invalid_case_id"),true);
+  assert.equal(JSON.stringify(result).includes("secret conversation text"),false);
+});
+
+test("UTC timestamps with fractional seconds preserve exact chronology", () => {
+  const sample = edit("job.short.foreground", s => {
+    s.hostDispatch.acceptedAt = "2026-10-14T10:00:32.125Z";
+    s.freshTurn.startedAt = "2026-10-14T10:00:33.1Z";
+    s.continuation.at = "2026-10-14T10:00:34.05Z";
+  });
+  assert.equal(assessHostContinuationCase(sample).mechanicallyConsistent,true);
+});
