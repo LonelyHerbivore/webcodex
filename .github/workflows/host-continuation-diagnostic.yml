@@ -11,7 +11,7 @@ permissions:
 
 concurrency:
   group: host-diagnostic-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   host-app-contract:
