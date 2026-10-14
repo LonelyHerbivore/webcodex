@@ -4,24 +4,25 @@ import { assessHostContinuationCase, assessHostContinuationMatrix, HOST_CONTINUA
 
 const fixture = caseId => {
   const kind = caseId.startsWith("job.") ? "job" : "agent";
+  const tag = caseId.replaceAll(".", "_");
   const timePrefix = caseId.includes(".long.") ? "10:05:" : "10:00:";
   const second = caseId.includes(".long.") ? "00" : "30";
   return {
-    caseId, conversationKey: "conversation_fixture", principalKey: "principal_fixture",
-    originalTurn: { id: "turn_original", conversationKey: "conversation_fixture", finalAt: "2026-10-14T10:00:00Z" },
+    caseId, conversationKey: `conversation_fixture_${tag}`, principalKey: `principal_fixture_${tag}`,
+    originalTurn: { id: `turn_original_${tag}`, conversationKey: `conversation_fixture_${tag}`, finalAt: "2026-10-14T10:00:00Z" },
     hostEnvironment: { visibilityAtTrigger: caseId.split(".")[2] },
-    trigger: { eventId: "event_fixture", principalKey: "principal_fixture",
-      at: `2026-10-14T${timePrefix}${second}Z`, jobId: "job_fixture", wakeId: "wake_fixture" },
-    hostDispatch: { eventId: "event_fixture", outcome: "dispatch_accepted",
+    trigger: { eventId: `event_fixture_${tag}`, principalKey: `principal_fixture_${tag}`,
+      at: `2026-10-14T${timePrefix}${second}Z`, jobId: `job_fixture_${tag}`, wakeId: `wake_fixture_${tag}` },
+    hostDispatch: { eventId: `event_fixture_${tag}`, outcome: "dispatch_accepted",
       preparedAt: `2026-10-14T${timePrefix}${caseId.includes(".long.") ? "01" : "31"}Z`,
       acceptedAt: `2026-10-14T${timePrefix}${caseId.includes(".long.") ? "02" : "32"}Z` },
-    freshTurn: { id: "turn_fresh", eventId: "event_fixture",
-      conversationKey: "conversation_fixture", source: "host_turn_trace",
+    freshTurn: { id: `turn_fresh_${tag}`, eventId: `event_fixture_${tag}`,
+      conversationKey: `conversation_fixture_${tag}`, source: "host_turn_trace",
       initiatedWithoutUserAction: true,
       startedAt: `2026-10-14T${timePrefix}${caseId.includes(".long.") ? "03" : "33"}Z` },
-    continuation: { source: "model_tool_trace", eventId: "event_fixture",
-      turnId: "turn_fresh", tool: kind === "job" ? "observe_jobs" : "consume_agent_wake",
-      jobId: "job_fixture", wakeId: "wake_fixture",
+    continuation: { source: "model_tool_trace", eventId: `event_fixture_${tag}`,
+      turnId: `turn_fresh_${tag}`, tool: kind === "job" ? "observe_jobs" : "consume_agent_wake",
+      jobId: `job_fixture_${tag}`, wakeId: `wake_fixture_${tag}`,
       at: `2026-10-14T${timePrefix}${caseId.includes(".long.") ? "04" : "34"}Z` },
     userActionsAfterFinal: 0, duplicateDispatchCount: 0, duplicateWorkerStartCount: 0,
     duplicateFreshTurnCount: 0,
@@ -66,7 +67,7 @@ test("different conversation, principal, wake or turn ID never correlates", () =
     ["fresh_turn_event_mismatch", s => { s.freshTurn.eventId = "event_other"; }],
     ["consumption_event_mismatch", s => { s.continuation.eventId = "event_other"; }],
     ["consumption_turn_mismatch", s => { s.continuation.turnId = "turn_other"; }],
-    ["turn_identity_missing_or_reused", s => { s.freshTurn.id = "turn_original"; }],
+    ["turn_identity_missing_or_reused", s => { s.freshTurn.id = s.originalTurn.id; }],
   ];
   for (const [expected, change] of changes) {
     const result = assessHostContinuationCase(edit("agent.long.background", change));
@@ -154,4 +155,21 @@ test("UTC timestamps with fractional seconds preserve exact chronology", () => {
     s.continuation.at = "2026-10-14T10:00:34.05Z";
   });
   assert.equal(assessHostContinuationCase(sample).mechanicallyConsistent,true);
+});
+
+test("six-case matrix rejects reused conversations and event IDs", () => {
+  const cases = HOST_CONTINUATION_CASES.map(fixture);
+  const first = cases[0], second = cases[1];
+  second.conversationKey = first.conversationKey;
+  second.originalTurn.conversationKey = first.conversationKey;
+  second.freshTurn.conversationKey = first.conversationKey;
+  second.trigger.eventId = first.trigger.eventId;
+  second.hostDispatch.eventId = first.trigger.eventId;
+  second.freshTurn.eventId = first.trigger.eventId;
+  second.continuation.eventId = first.trigger.eventId;
+  const result = assessHostContinuationMatrix(cases);
+  assert.equal(result.mechanicallyConsistent,false);
+  assert.ok(result.duplicateEvidenceFields.includes("conversationKey"));
+  assert.ok(result.duplicateEvidenceFields.includes("trigger.eventId"));
+  assert.equal(result.hostVerified,false);
 });
