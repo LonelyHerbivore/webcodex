@@ -430,6 +430,24 @@ impl ToolRuntime {
     }
 }
 
+// A terminal Job fact is not proof that its Host continuation was settled.
+// These timestamps are for diagnostics only; neither grants retry or resume authority.
+fn delivery_settlement_at(wait: &JobTerminalWaitRecord) -> Option<i64> {
+    use webcodex_store::JobTerminalDeliveryState;
+    match wait.delivery_state {
+        JobTerminalDeliveryState::Delivered | JobTerminalDeliveryState::DeliveryUnknown => {
+            Some(wait.updated_at)
+        }
+        _ => None,
+    }
+}
+
+fn terminal_to_delivery_settlement_seconds(wait: &JobTerminalWaitRecord) -> Option<i64> {
+    let terminal = wait.terminal_observed_at?;
+    let settled = delivery_settlement_at(wait)?;
+    settled.checked_sub(terminal).filter(|delay| *delay >= 0)
+}
+
 fn wait_projection(
     wait: &JobTerminalWaitRecord,
     automatic_resume_available: bool,
@@ -442,6 +460,9 @@ fn wait_projection(
         "delivery_state": wait.delivery_state.as_str(),
         "terminal_status": wait.terminal_status,
         "terminal_outcome": wait.terminal_outcome,
+        "terminal_observed_at": wait.terminal_observed_at,
+        "delivery_settled_at": delivery_settlement_at(wait),
+        "terminal_to_delivery_settlement_seconds": terminal_to_delivery_settlement_seconds(wait),
         "automatic_resume_available": automatic_resume_available,
         "expires_at": wait.expires_at,
         "fallback_tool": "observe_jobs",
@@ -461,6 +482,9 @@ fn wait_output(
         "delivery_state": wait.delivery_state.as_str(),
         "terminal_status": wait.terminal_status,
         "terminal_outcome": wait.terminal_outcome,
+        "terminal_observed_at": wait.terminal_observed_at,
+        "delivery_settled_at": delivery_settlement_at(wait),
+        "terminal_to_delivery_settlement_seconds": terminal_to_delivery_settlement_seconds(wait),
         "replayed": replayed,
         "state_changed": state_changed,
         "automatic_resume_available": automatic_resume_available,
