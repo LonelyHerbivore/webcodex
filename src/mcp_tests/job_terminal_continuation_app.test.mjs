@@ -410,3 +410,60 @@ test("background visibility transition during ambiguous Host delivery never redi
   assert.equal(hostMessages(view).length, 1, "visibility cannot resend an uncertain Host message");
   assert.equal(calls(view, "prepare_job_terminal_continuation").length, 1);
 });
+
+test("Host delivered with a 2608-second lag reports delay but never claims a new model turn", async () => {
+  const view = await boundWaitingView();
+  await view.fireTimers(3000);
+  const poll = calls(view, "get_job_terminal_continuation_state").at(-1);
+  await view.reply(poll, stateResult({
+    ...pending,
+    delivery_state: "delivered",
+    terminal_to_delivery_settlement_seconds: 2608,
+  }));
+  assert.match(view.nodes.status.textContent, /43m 28s after Job/);
+  assert.match(view.nodes.status.textContent, /new ChatGPT turn unverified/);
+  assert.equal(hostMessages(view).length, 0);
+  assert.equal(view.timers.size, 0);
+});
+
+test("malformed and unsettled latency never appears as a settlement fact", async () => {
+  for (const invalid of [-1, "2608", Number.POSITIVE_INFINITY, 58]) {
+    const view = await boundWaitingView();
+    await view.fireTimers(3000);
+    const poll = calls(view, "get_job_terminal_continuation_state").at(-1);
+    await view.reply(poll, stateResult({
+      ...pending,
+      delivery_state: "delivered",
+      terminal_to_delivery_settlement_seconds: invalid,
+    }));
+    assert.doesNotMatch(view.nodes.status.textContent, /settled/);
+    assert.match(view.nodes.status.textContent, /new ChatGPT turn unverified/);
+    assert.equal(hostMessages(view).length, 0);
+  }
+});
+
+test("frozen 2608-second background cannot dispatch until visibility resumes (diagnostic reproduction)", async () => {
+  const view = await boundWaitingView();
+  await view.visibility(true);
+  const hiddenPoll = calls(view, "get_job_terminal_continuation_state").at(-1);
+  await view.reply(hiddenPoll, stateResult(waiting));
+  const expectedHiddenTimer = [...view.timers.values()];
+  assert.ok(expectedHiddenTimer.some(timer => timer.delay === 15000));
+  const before = calls(view, "get_job_terminal_continuation_state").length;
+  view.advanceTime(2608000); // Simulates a suspended iframe: no timer callbacks.
+  assert.equal(calls(view, "get_job_terminal_continuation_state").length, before);
+  assert.equal(hostMessages(view).length, 0);
+
+  await view.visibility(false); // Browser tab becomes visible again.
+  const resumedPoll = calls(view, "get_job_terminal_continuation_state").at(-1);
+  assert.equal(calls(view, "get_job_terminal_continuation_state").length, before + 1);
+  await view.reply(resumedPoll, stateResult(pending));
+  const prepare = calls(view, "prepare_job_terminal_continuation").at(-1);
+  assert.ok(prepare, "foreground transition can recover a pending Wait");
+  await view.reply(prepare, prepareResult());
+  assert.equal(hostMessages(view).length, 1, "exactly one Host dispatch attempt");
+  await view.reply(hostMessages(view)[0], {});
+  const finish = calls(view, "finish_job_terminal_continuation").at(-1);
+  await view.reply(finish, finishResult("delivered"));
+  assert.equal(hostMessages(view).length, 1);
+});
