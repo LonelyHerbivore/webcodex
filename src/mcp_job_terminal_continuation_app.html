@@ -196,6 +196,14 @@
     return "Host delivery response unavailable";
   }
 
+  // Host dispatch acceptance does not prove a new model turn.
+  function deliveryLatencyLabel(value) {
+    const seconds = value && value.terminal_to_delivery_settlement_seconds;
+    if (!Number.isSafeInteger(seconds) || seconds < 60) return "";
+    if (seconds > 604800) return " · delivery settled more than 7 days after Job";
+    return " · settled " + Math.floor(seconds / 60) + "m " + (seconds % 60) + "s after Job";
+  }
+
   function render(value) {
     if (!validProjection(value)) return;
     projection = value;
@@ -207,7 +215,7 @@
       return;
     }
     if (value.delivery_state === "delivered") {
-      el("status").textContent = "Continuation accepted by Host";
+      el("status").textContent = "Continuation accepted by Host" + deliveryLatencyLabel(value) + " · new ChatGPT turn unverified";
     } else if (value.delivery_state === "delivery_unknown") {
       el("status").textContent = hostDispatchFailureReason
         ? "Continuation delivery is unknown · " + hostDispatchFailureReason
