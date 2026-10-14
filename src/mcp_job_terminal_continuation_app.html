@@ -55,6 +55,7 @@
   let projection = null;
   let prepareUncertain = false;
   let dispatchStartedAttempt = null;
+  let hostDispatchFailureReason = null;
   let pendingFinish = null;
   let rebindAttemptedAfterLoss = false;
   let carrierLost = false;
@@ -189,6 +190,12 @@
     return Math.max(0, autoResumeNotBeforeMs - Date.now());
   }
 
+  function classifyHostDispatchFailure(error) {
+    if (error?.message === "Host bridge timeout") return "Host bridge timed out after 10 seconds";
+    if (error?.message === "Host request failed") return "Host returned a bridge error";
+    return "Host delivery response unavailable";
+  }
+
   function render(value) {
     if (!validProjection(value)) return;
     projection = value;
@@ -202,7 +209,9 @@
     if (value.delivery_state === "delivered") {
       el("status").textContent = "Continuation accepted by Host";
     } else if (value.delivery_state === "delivery_unknown") {
-      el("status").textContent = "Continuation delivery is unknown";
+      el("status").textContent = hostDispatchFailureReason
+        ? "Continuation delivery is unknown · " + hostDispatchFailureReason
+        : "Continuation delivery is unknown";
     } else if (value.delivery_state === "prepared") {
       el("status").textContent = "Continuation prepared";
     } else if (value.state === "triggered") {
@@ -320,6 +329,8 @@
   async function reconcilePrepareUncertainty(current) {
     if (!prepareUncertain) return false;
     if (current.projection.delivery_state === "prepared" && current.preparedAttemptId) {
+      // The durable prepare fence is uncertain; no verified Host dispatch.
+      hostDispatchFailureReason = "Prepare result uncertain; Host dispatch not confirmed";
       await finish(current.preparedAttemptId, "delivery_unknown");
       return true;
     }
@@ -363,14 +374,16 @@
     // the durable prepared state and the Server reconciles it conservatively.
     dispatchStartedAttempt = attemptId;
     let outcome = "delivery_unknown";
+    hostDispatchFailureReason = null;
     try {
       await request("ui/message", {
         role: "user",
         content: [{ type: "text", text: message }],
       });
       outcome = "dispatch_accepted";
-    } catch (_) {
-      // Host rejection, timeout, or response loss after prepare is unknown.
+    } catch (error) {
+      // This local classification does not prove whether Host delivered anything.
+      hostDispatchFailureReason = classifyHostDispatchFailure(error);
     }
     await finish(attemptId, outcome);
   }
@@ -439,7 +452,10 @@
       if (await reconcilePrepareUncertainty(current)) return;
       if (current.projection.delivery_state === "prepared") {
         // A prepared attempt that this View did not dispatch is never resent.
-        if (current.preparedAttemptId) await finish(current.preparedAttemptId, "delivery_unknown");
+        if (current.preparedAttemptId) {
+          hostDispatchFailureReason = "Prepared attempt not dispatched by this View";
+          await finish(current.preparedAttemptId, "delivery_unknown");
+        }
         return;
       }
       if (current.projection.state === "triggered" && current.projection.delivery_state === "pending") {
