@@ -210,6 +210,62 @@ async fn already_terminal_registration_is_immediate_and_keyed_replay_is_stable()
 }
 
 #[tokio::test]
+async fn terminal_delivery_latency_is_read_only_and_survives_exact_replay() {
+    let (_temp, runtime, db) = attention_runtime().await;
+    let auth = shared_key_auth_context(&"e".repeat(64));
+    let (job_id, request) =
+        start_owned_job(&runtime, "e3-delayed-delivery", "project-latency", &auth).await;
+    complete_job(&runtime, "e3-delayed-delivery", &request, Some(1)).await;
+    let first = runtime
+        .dispatch_with_auth(
+            ToolCall::WaitForJobTerminal {
+                job_id: job_id.clone(),
+                idempotency_key: "e3-delayed-settlement".to_string(),
+            },
+            Some(&auth),
+        )
+        .await;
+    assert!(first.success, "{:?}", first.error);
+    assert_eq!(first.output["delivery_state"], "pending");
+    assert!(first.output["terminal_observed_at"].is_number());
+    assert!(first.output["delivery_settled_at"].is_null());
+    assert!(first.output["terminal_to_delivery_settlement_seconds"].is_null());
+
+    let wait_id = first.output["wait_id"].as_str().unwrap();
+    let principal = principal_for_auth(Some(&auth));
+    let observed_at = first.output["terminal_observed_at"].as_i64().unwrap();
+    let settlement_at = observed_at + 2_608;
+    let prepared = db
+        .prepare_job_terminal_delivery(&principal, wait_id, settlement_at)
+        .unwrap()
+        .expect("pending wait can be prepared once");
+    let finished = db
+        .finish_job_terminal_delivery(
+            &principal, wait_id, &prepared.attempt_id, true, settlement_at,
+        )
+        .unwrap();
+    assert_eq!(finished.delivery_state, JobTerminalDeliveryState::Delivered);
+
+    let replay = runtime
+        .dispatch_with_auth(
+            ToolCall::WaitForJobTerminal {
+                job_id, idempotency_key: "e3-delayed-settlement".to_string(),
+            },
+            Some(&auth),
+        )
+        .await;
+    assert!(replay.success, "{:?}", replay.error);
+    assert_eq!(replay.output["replayed"], true);
+    assert_eq!(replay.output["state_changed"], false);
+    assert_eq!(replay.output["wait_id"], wait_id);
+    assert_eq!(replay.output["delivery_state"], "delivered");
+    assert_eq!(replay.output["terminal_observed_at"], observed_at);
+    assert_eq!(replay.output["delivery_settled_at"], settlement_at);
+    assert_eq!(replay.output["terminal_to_delivery_settlement_seconds"], 2_608);
+    assert!(replay.output.get("new_model_turn_confirmed").is_none());
+}
+
+#[tokio::test]
 async fn unauthorized_registration_is_existence_hiding_and_session_window_are_not_authority() {
     let (_temp, runtime, _db) = attention_runtime().await;
     let auth_a = shared_key_auth_context(&"c".repeat(64));
