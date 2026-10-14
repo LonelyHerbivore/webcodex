@@ -77,7 +77,7 @@ function projectContinuationByPublishedSchema(value) {
 
 async function boundView(options = { deliverToolMeta: false }) {
   const view = app("mcp_agent_continuation_app.html", options);
-  await view.initialize();
+  await view.initialize("success", options.hostCapabilities);
   view.toolInput(input);
   await flush();
   await view.reply(view.calls("bind_agent_continuation").at(-1), toolResult({ agent_continuation: projection }));
@@ -1494,4 +1494,36 @@ test("Agent Wait sparse reference still requires the exact durable target on App
   assert.equal(view.nodes.status.textContent, "Invalid or conflicting Wait identity");
   assert.notEqual(view.nodes.waitSummary?.hidden, false);
   assert.equal(hostMessages(view).length, 0);
+});
+
+test("Agent Host explicit missing text capability leaves Wake unclaimed", async () => {
+  for (const hostCapabilities of [{}, { message: { image: {} } }, { message: null }]) {
+    const view = await boundView({ hostCapabilities, deliverToolMeta: false });
+    await view.reply(view.calls("get_agent_continuation_state").at(-1), toolResult({ agent_continuation: projection }));
+    assert.equal(view.calls("acquire_agent_continuation_wake").length, 0);
+    assert.equal(view.calls("prepare_agent_continuation_wake").length, 0);
+    assert.equal(hostMessages(view).length, 0);
+    assert.match(view.nodes.status.textContent, /Host text message capability unavailable/);
+  }
+});
+
+test("Agent Host positive text capability allows visible one-shot dispatch", async () => {
+  const view = await boundView({ hostCapabilities: { message: { text: {} } }, deliverToolMeta: false });
+  await view.reply(view.calls("get_agent_continuation_state").at(-1), toolResult({ agent_continuation: projection }));
+  assert.equal(view.calls("acquire_agent_continuation_wake").length, 1);
+  await view.reply(view.calls("acquire_agent_continuation_wake").at(-1), toolResult({ wake }));
+  await view.reply(view.calls("prepare_agent_continuation_wake").at(-1), prepared());
+  assert.equal(hostMessages(view).length, 1);
+  await view.reply(hostMessages(view)[0], {});
+  const finishCall = view.calls("finish_agent_continuation_wake").at(-1);
+  assert.equal(finishCall.params.arguments.outcome, "dispatch_accepted");
+});
+
+test("legacy Agent Host omitting capabilities retains compatibility without new-turn proof", async () => {
+  const view = await boundView();
+  await view.reply(view.calls("get_agent_continuation_state").at(-1), toolResult({ agent_continuation: projection }));
+  assert.equal(view.calls("acquire_agent_continuation_wake").length, 1);
+  await view.reply(view.calls("acquire_agent_continuation_wake").at(-1), toolResult({ wake }));
+  await view.reply(view.calls("prepare_agent_continuation_wake").at(-1), prepared());
+  assert.equal(hostMessages(view).length, 1);
 });
