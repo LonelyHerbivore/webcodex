@@ -594,7 +594,8 @@ h1 { margin: 0; font-size: 15px; font-weight: 650; overflow-wrap: anywhere; }
       timer = null;
       if (scheduledEpoch !== identityEpoch) return scheduleNext();
       if (bindingId) void reconcile(); else void maybeStartBinding();
-    }, document.hidden ? HIDDEN_HEARTBEAT_MS : VISIBLE_POLL_MS);
+    }, document.hidden || (!bindingId && bindAttempts >= MAX_BIND_ATTEMPTS)
+      ? HIDDEN_HEARTBEAT_MS : VISIBLE_POLL_MS);
   }
 
   async function bind() {
@@ -840,6 +841,14 @@ h1 { margin: 0; font-size: 15px; font-weight: 650; overflow-wrap: anywhere; }
         el("binding").textContent = "Reconnecting";
         el("status").textContent = "Reconnecting…";
       } else if (!tornDown) {
+        // Host bridge timeouts/rejections are not evidence of Endpoint expiry.
+        // Recovery may rotate generation, so only attempt it on authoritative
+        // semantic failures; a transient outage keeps the exact bound identity.
+        if (["bridge-error", "bridge-timeout", "bridge-cancelled"].includes(error?.hostFailureKind)) {
+          el("binding").textContent = "Reconnecting";
+          el("status").textContent = "Connection interrupted · retrying…";
+          return;
+        }
         const recovered = await recoverExpiredEndpoint();
         if (recovered) {
           void maybeStartBinding();
@@ -910,7 +919,11 @@ h1 { margin: 0; font-size: 15px; font-weight: 650; overflow-wrap: anywhere; }
     } catch (error) {
       if (!tornDown) {
         const diagnostic = hostFailureDiagnostic(error);
-        if (!error.definitive && bindAttempts < MAX_BIND_ATTEMPTS) {
+        if (!error.definitive && (["bridge-error", "bridge-timeout", "bridge-cancelled"].includes(error?.hostFailureKind)
+          || bindAttempts < MAX_BIND_ATTEMPTS)) {
+          // A transport outage is not proof of Endpoint expiry. Keep the
+          // exact View binding fence and reduce retries to 15s after
+          // repeated failed Host bridge operations.
           bindingStarted = false;
           el("status").textContent = diagnostic
             ? `Connection interrupted · ${diagnostic} · retrying…`

@@ -107,6 +107,47 @@ six-case real-Host test with independent `fresh_turn_started` and matching
 `consume_agent_wake` traces can establish unattended Agent continuation.
 This change does **not** install a native Host Push Adapter.
 
+## Transient WebCodex transport recovery (diagnostic only)
+
+The continuation Views now distinguish a **Host bridge/transport failure** from
+an authoritative Server-side binding failure. This addresses a reproducible
+case where a temporary disconnection caused the Job card to attempt a rebind,
+declare its carrier permanently lost, and stop polling after the network had
+recovered.
+
+- **Job state read:** An RPC timeout/error preserves the existing Wait/Host
+  binding and schedules another read. A canonical negative Server result may
+  initiate the existing bounded rebind using the *same* View binding ID.
+  Network loss during that rebind retains the durable Wait and retries its
+  binding read after reconnection rather than setting `carrierLost`.
+- **Job completion ACK:** A failed `finish_job_terminal_continuation`
+  retains exactly the old prepared Attempt ID and outcome. If the subsequent
+  state read also loses transport, the View preserves that Finish and does not
+  resend `ui/message`. An explicit Server binding failure still follows
+  the bounded recovery path.
+- **Agent heartbeat:** A transient bridge timeout/error is **not** an
+  `endpoint_expired` signal and cannot rotate the Agent's Endpoint or
+  controller generation. The original bound Agent remains eligible for a
+  verified read after reconnection.
+- **Agent initial bind:** Repeated Host transport failures preserve the
+  original View fence; after three failures retry polling slows to 15 seconds
+  rather than exhausting all recovery attempts and dropping pending work.
+  A canonical expiry result still allows the existing exact-successor
+  recovery with identity/generation validation.
+- **One-shot safety:** Once a prepare fence might have been crossed, a lost
+  response is still `delivery_unknown`; it is never reset to `pending`
+  or treated as authority to prepare or send again. Host `ui/message` ACK
+  is not fresh-turn proof; no Orca Worker is started by these Views.
+
+The Node simulated-Host regression suite covers state timeouts, proven
+binding loss, network failure *during* rebind, loss during Finish, Agent
+heartbeat disconnection, and multiple binding timeouts followed by recovery.
+These tests **do not establish** a native Host push adapter, closed-tab
+scheduling, end-to-end real Worker wake, or at-least-once model execution.
+A destroyed iframe must be reopened by an authorized Host surface; pending
+durable state alone does not execute a ChatGPT turn. Keep the real-Host
+six-case matrix and release gate unchanged.
+
 ## Real ChatGPT matrix
 
 Run each case in a new test conversation with fresh identities. For Agent,
