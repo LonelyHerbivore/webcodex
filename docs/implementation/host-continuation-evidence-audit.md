@@ -29,7 +29,7 @@ Keep the evidence JSON **locally**, outside Git and outside C: (for example on D
 node scripts/assess_host_continuation_evidence.mjs < /d/host-wake-evidence.local.json
 ```
 
-The input is a JSON array with **exactly six** separate case records. The checker never writes a file, calls ChatGPT, dispatches a Worker or exposes raw identifiers in its output. It returns exit code 0 for structurally complete and consistent records, 1 for incomplete/inconsistent records, 2 for invalid JSON. **Exit 0 still reports `hostVerified:false`**.
+The input is a JSON array with **exactly six** separate case records. Each case must use a distinct conversation key, original/new turn IDs, event ID, and its own Job ID or Agent Wake ID; a previously successful probe cannot be replayed as another case. The checker never writes a file, calls ChatGPT, dispatches a Worker or exposes raw identifiers in its output. It returns exit code 0 for structurally complete and consistent records, 1 for incomplete/inconsistent records, 2 for invalid JSON. **Exit 0 still reports `hostVerified:false`**.
 
 The following is an illustrative **synthetic** one-case Job record. It is not evidence of a real Host pass:
 
