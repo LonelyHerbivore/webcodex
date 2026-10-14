@@ -61,10 +61,10 @@ const finishResult = deliveryState => toolResult({
   state_changed: true,
 });
 
-async function initializedView({ initialProjection = waiting, yieldCurrentTurn = true } = {}) {
+async function initializedView({ initialProjection = waiting, yieldCurrentTurn = true, hostCapabilities } = {}) {
   const view = app("mcp_job_terminal_continuation_app.html");
   view.toolInput(input);
-  await view.initialize();
+  await view.initialize("success", hostCapabilities);
   view.toolResult({ job_terminal_continuation: initialProjection });
   await flush();
   if (yieldCurrentTurn) view.advanceTime(10000);
@@ -466,4 +466,44 @@ test("frozen 2608-second background cannot dispatch until visibility resumes (di
   const finish = calls(view, "finish_job_terminal_continuation").at(-1);
   await view.reply(finish, finishResult("delivered"));
   assert.equal(hostMessages(view).length, 1);
+});
+
+test("explicit Host capabilities without text ui/message prevent a durable prepare", async () => {
+  for (const hostCapabilities of [{}, { message: { image: {} } }, { message: null }]) {
+    const view = await boundWaitingView({ hostCapabilities });
+    await view.fireTimers(3000);
+    const poll = calls(view, "get_job_terminal_continuation_state").at(-1);
+    await view.reply(poll, stateResult(pending));
+    assert.equal(calls(view, "prepare_job_terminal_continuation").length, 0);
+    assert.equal(hostMessages(view).length, 0);
+    assert.equal(view.timers.size, 0, "an unsupported Host must not keep polling after terminal");
+    assert.match(view.nodes.status.textContent, /Host text message capability unavailable/);
+  }
+});
+
+test("positive text ui/message capability allows one dispatch, without claiming a model turn", async () => {
+  const view = await boundWaitingView({ hostCapabilities: { message: { text: {} } } });
+  await view.fireTimers(3000);
+  const poll = calls(view, "get_job_terminal_continuation_state").at(-1);
+  await view.reply(poll, stateResult(pending));
+  const prepare = calls(view, "prepare_job_terminal_continuation").at(-1);
+  assert.ok(prepare);
+  await view.reply(prepare, prepareResult());
+  assert.equal(hostMessages(view).length, 1);
+  await view.reply(hostMessages(view)[0], {});
+  const finish = calls(view, "finish_job_terminal_continuation").at(-1);
+  await view.reply(finish, finishResult("delivered"));
+  assert.match(view.nodes.status.textContent, /new ChatGPT turn unverified/);
+});
+
+test("legacy missing Host capabilities retain delivery compatibility but not proof of a new turn", async () => {
+  const view = await boundWaitingView();
+  await view.fireTimers(3000);
+  const poll = calls(view, "get_job_terminal_continuation_state").at(-1);
+  await view.reply(poll, stateResult(pending));
+  const prepare = calls(view, "prepare_job_terminal_continuation").at(-1);
+  assert.ok(prepare);
+  await view.reply(prepare, prepareResult());
+  assert.equal(hostMessages(view).length, 1);
+  assert.doesNotMatch(view.nodes.status.textContent, /new ChatGPT turn confirmed/);
 });
