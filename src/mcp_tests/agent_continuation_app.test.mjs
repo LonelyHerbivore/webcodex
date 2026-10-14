@@ -783,10 +783,15 @@ test("input-only background carrier keeps bounded heartbeat cadence", async () =
   assert.equal(view.calls("get_agent_continuation_state").length, 2);
 });
 
-test("input-only hidden carrier acquires prepares and dispatches exactly once", async () => {
+test("input-only hidden carrier defers dispatch until visible and sends once", async () => {
   const view = await boundView();
   await view.visibility(true);
   await view.reply(view.calls("get_agent_continuation_state")[0], toolResult({ agent_continuation: projection }));
+  assert.equal(view.calls("acquire_agent_continuation_wake").length, 0);
+  assert.equal(view.calls("prepare_agent_continuation_wake").length, 0);
+  assert.equal(hostMessages(view).length, 0);
+  await view.visibility(false);
+  await view.reply(view.calls("get_agent_continuation_state").at(-1), toolResult({ agent_continuation: projection }));
   assert.equal(view.calls("acquire_agent_continuation_wake").length, 1);
   await view.reply(view.calls("acquire_agent_continuation_wake")[0], toolResult({ wake }));
   assert.equal(view.calls("prepare_agent_continuation_wake").length, 1);
@@ -924,7 +929,6 @@ test("teardown before a prepare response never dispatches a Host message", async
 
 test("Host dispatch rejection after prepare is unknown and never resent", async () => {
   const view = await boundView();
-  await view.visibility(true);
   await view.reply(view.calls("get_agent_continuation_state").at(-1), toolResult({ agent_continuation: projection }));
   await view.reply(view.calls("acquire_agent_continuation_wake").at(-1), toolResult({ wake }));
   await view.reply(view.calls("prepare_agent_continuation_wake").at(-1), prepared());
