@@ -46,6 +46,10 @@
   let nextRpcId = 1;
   const pending = new Map();
   let hostInitialized = false;
+  // The Host can advertise ui/message text support during ui/initialize.
+  // This only establishes message transport availability, never new-model-turn scheduling.
+  // A missing legacy capability envelope is unknown, not proof of support.
+  let hostTextMessageSupported = null;
   let tornDown = false;
   let waitId = null;
   let bindingId = null;
@@ -223,7 +227,9 @@
     } else if (value.delivery_state === "prepared") {
       el("status").textContent = "Continuation prepared";
     } else if (value.state === "triggered") {
-      if (autoResumeSuppressed) {
+      if (hostTextMessageSupported === false) {
+        el("status").textContent = "Host text message capability unavailable · inspect Job manually";
+      } else if (autoResumeSuppressed) {
         el("status").textContent = "Job finished · terminal result already available";
       } else if (automaticResumeDelayMs() > 0) {
         el("status").textContent = "Job finished · waiting for current turn to yield…";
@@ -239,6 +245,7 @@
 
   function shouldStop(value = projection) {
     return carrierLost
+      || !!(value && value.state === "triggered" && hostTextMessageSupported === false)
       || !!(value && (TERMINAL_DELIVERY.has(value.delivery_state) || expired(value)))
       || !!(value && autoResumeSuppressed && value.state === "triggered");
   }
@@ -353,7 +360,7 @@
 
   async function prepareAndDispatch() {
     if (prepareUncertain || dispatchStartedAttempt || pendingFinish || tornDown
-      || autoResumeSuppressed || autoResumeNotBeforeMs === null || Date.now() < autoResumeNotBeforeMs) return;
+      || hostTextMessageSupported === false || autoResumeSuppressed || autoResumeNotBeforeMs === null || Date.now() < autoResumeNotBeforeMs) return;
     let response;
     try {
       response = await callTool("prepare_job_terminal_continuation", {
@@ -569,8 +576,15 @@
       version: "1.0.0",
     },
     appCapabilities: {},
-  }).then(() => {
+  }).then(result => {
     if (tornDown) return;
+    // Explicit capabilities supersede optimistic transport assumptions.
+    // Do not cross the durable prepare fence if text ui/message is unavailable.
+    const caps = result?.hostCapabilities;
+    if (caps && typeof caps === "object" && !Array.isArray(caps)) {
+      const text = caps.message?.text;
+      hostTextMessageSupported = !!(text && typeof text === "object" && !Array.isArray(text));
+    }
     hostInitialized = true;
     notify("ui/notifications/initialized", {});
     void reconcile();
