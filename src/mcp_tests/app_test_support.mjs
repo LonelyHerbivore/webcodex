@@ -120,11 +120,11 @@ export function app(filename, { deliverToolMeta = true, deliverToolStructuredCon
       deliver({ id: request.id, error });
       await flush();
     },
-    async initialize(outcome = "success") {
+    async initialize(outcome = "success", hostCapabilities) {
       if (outcome === "timeout") await this.fireTimers(10000);
       else {
         deliver({ id: sent[0].id, ...(outcome === "success"
-          ? { result: { protocolVersion: "2026-01-26" } }
+          ? { result: { protocolVersion: "2026-01-26", ...(hostCapabilities === undefined ? {} : { hostCapabilities }) } }
           : { error: { message: "Host initialization rejected" } }) });
         await flush();
       }
