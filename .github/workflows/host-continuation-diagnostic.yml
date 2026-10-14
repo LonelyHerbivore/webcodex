@@ -11,7 +11,7 @@ permissions:
 
 concurrency:
   group: host-diagnostic-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   host-app-contract:
@@ -26,7 +26,7 @@ jobs:
         with:
           node-version: '22'
       - name: Run Host App tests
-        run: node --test src/mcp_tests/job_terminal_continuation_app.test.mjs
+        run: node --test src/mcp_tests/job_terminal_continuation_app.test.mjs src/mcp_tests/host_continuation_evidence.test.mjs
 
   rust-host-contract:
     name: Rust Host/Store compile check
