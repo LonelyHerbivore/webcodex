@@ -1,0 +1,44 @@
+name: Host continuation diagnostic acceptance
+
+on:
+  push:
+    branches:
+      - "diagnostic/host-*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: host-diagnostic-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  host-app-contract:
+    name: MCP App bridge and delivery regression
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run Host App tests
+        run: node --test src/mcp_tests/job_terminal_continuation_app.test.mjs
+
+  rust-host-contract:
+    name: Rust Host/Store compile check
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Check WebCodex Host and Store
+        run: cargo check --locked -p webcodex -p webcodex-store --all-targets
+      - name: Run Store Job terminal tests
+        run: cargo test --locked -p webcodex-store job_terminal_wait
