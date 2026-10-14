@@ -241,7 +241,11 @@ async fn terminal_delivery_latency_is_read_only_and_survives_exact_replay() {
         .expect("pending wait can be prepared once");
     let finished = db
         .finish_job_terminal_delivery(
-            &principal, wait_id, &prepared.attempt_id, true, settlement_at,
+            &principal,
+            wait_id,
+            &prepared.attempt_id,
+            true,
+            settlement_at,
         )
         .unwrap();
     assert_eq!(finished.delivery_state, JobTerminalDeliveryState::Delivered);
@@ -249,7 +253,8 @@ async fn terminal_delivery_latency_is_read_only_and_survives_exact_replay() {
     let replay = runtime
         .dispatch_with_auth(
             ToolCall::WaitForJobTerminal {
-                job_id, idempotency_key: "e3-delayed-settlement".to_string(),
+                job_id,
+                idempotency_key: "e3-delayed-settlement".to_string(),
             },
             Some(&auth),
         )
@@ -261,7 +266,10 @@ async fn terminal_delivery_latency_is_read_only_and_survives_exact_replay() {
     assert_eq!(replay.output["delivery_state"], "delivered");
     assert_eq!(replay.output["terminal_observed_at"], observed_at);
     assert_eq!(replay.output["delivery_settled_at"], settlement_at);
-    assert_eq!(replay.output["terminal_to_delivery_settlement_seconds"], 2_608);
+    assert_eq!(
+        replay.output["terminal_to_delivery_settlement_seconds"],
+        2_608
+    );
     assert!(replay.output.get("new_model_turn_confirmed").is_none());
 }
 
