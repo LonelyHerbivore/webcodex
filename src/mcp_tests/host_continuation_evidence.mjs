@@ -100,6 +100,8 @@ export function assessHostContinuationMatrix(samples) {
     ["originalTurn.id", x => x?.originalTurn?.id],
     ["freshTurn.id", x => x?.freshTurn?.id],
     ["trigger.eventId", x => x?.trigger?.eventId],
+    ["trigger.jobId", x => x?.caseId?.startsWith("job.") ? x?.trigger?.jobId : null],
+    ["trigger.wakeId", x => x?.caseId?.startsWith("agent.") ? x?.trigger?.wakeId : null],
   ];
   const duplicateEvidenceFields = [];
   for (const [field, read] of identifiers) {
