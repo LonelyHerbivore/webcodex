@@ -507,3 +507,65 @@ test("legacy missing Host capabilities retain delivery compatibility but not pro
   assert.equal(hostMessages(view).length, 1);
   assert.doesNotMatch(view.nodes.status.textContent, /new ChatGPT turn confirmed/);
 });
+
+test("hidden tab keeps completed Job pending; foreground re-entry dispatches exactly once", async () => {
+  const view = await boundWaitingView();
+  await view.visibility(true);
+  const hiddenState = calls(view, "get_job_terminal_continuation_state").at(-1);
+  await view.reply(hiddenState, stateResult(pending));
+  assert.equal(calls(view, "prepare_job_terminal_continuation").length, 0,
+    "do not consume one-shot prepare while hidden");
+  assert.equal(hostMessages(view).length, 0);
+  assert.match(view.nodes.status.textContent, /waiting for ChatGPT tab to become visible/);
+  assert.ok([...view.timers.values()].some(timer => timer.delay === 15000));
+
+  await view.fireTimers(15000);
+  const hiddenPoll = calls(view, "get_job_terminal_continuation_state").at(-1);
+  await view.reply(hiddenPoll, stateResult(pending));
+  assert.equal(calls(view, "prepare_job_terminal_continuation").length, 0);
+  assert.equal(hostMessages(view).length, 0);
+
+  await view.visibility(false);
+  const foregroundState = calls(view, "get_job_terminal_continuation_state").at(-1);
+  await view.reply(foregroundState, stateResult(pending));
+  const prepare = calls(view, "prepare_job_terminal_continuation").at(-1);
+  assert.ok(prepare, "a visible View may prepare the still-pending exact Wait");
+  await view.reply(prepare, prepareResult());
+  assert.equal(hostMessages(view).length, 1);
+  await view.reply(hostMessages(view)[0], {});
+  const finishCall = calls(view, "finish_job_terminal_continuation").at(-1);
+  await view.reply(finishCall, finishResult("delivered"));
+  assert.equal(calls(view, "prepare_job_terminal_continuation").length, 1);
+  assert.equal(hostMessages(view).length, 1, "visibility may not create duplicate messages");
+});
+
+test("switching to hidden during prepare never sends an unchecked background ui/message", async () => {
+  const view = await boundWaitingView();
+  await view.fireTimers(3000);
+  const stateCall = calls(view, "get_job_terminal_continuation_state").at(-1);
+  await view.reply(stateCall, stateResult(pending));
+  const prepare = calls(view, "prepare_job_terminal_continuation").at(-1);
+  assert.ok(prepare);
+  await view.visibility(true);
+  await view.reply(prepare, prepareResult());
+  assert.equal(hostMessages(view).length, 0, "no Host dispatch after tab becomes hidden");
+  const finishCall = calls(view, "finish_job_terminal_continuation").at(-1);
+  assert.ok(finishCall, "prepared fence must be closed conservatively");
+  assert.equal(finishCall.params.arguments.outcome, "delivery_unknown");
+  await view.reply(finishCall, finishResult("delivery_unknown"));
+  await view.visibility(false);
+  assert.equal(hostMessages(view).length, 0, "visibility cannot retry uncertain delivery");
+  assert.equal(calls(view, "prepare_job_terminal_continuation").length, 1);
+  assert.match(view.nodes.status.textContent, /Continuation delivery is unknown/);
+});
+
+test("visible-only policy does not confuse ui/message ACK with fresh-turn proof", async () => {
+  const view = await boundWaitingView({ hostCapabilities: { message: { text: {} } } });
+  await view.fireTimers(3000);
+  await view.reply(calls(view, "get_job_terminal_continuation_state").at(-1), stateResult(pending));
+  await view.reply(calls(view, "prepare_job_terminal_continuation").at(-1), prepareResult());
+  assert.equal(hostMessages(view).length, 1);
+  await view.reply(hostMessages(view)[0], {});
+  await view.reply(calls(view, "finish_job_terminal_continuation").at(-1), finishResult("delivered"));
+  assert.match(view.nodes.status.textContent, /new ChatGPT turn unverified/);
+});

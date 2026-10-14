@@ -231,6 +231,10 @@
         el("status").textContent = "Host text message capability unavailable · inspect Job manually";
       } else if (autoResumeSuppressed) {
         el("status").textContent = "Job finished · terminal result already available";
+      } else if (document.hidden) {
+        // Hidden-tab ui/message may be acknowledged without starting a model turn.
+        // Preserve the pending Wait until a visible View can request delivery.
+        el("status").textContent = "Job finished · waiting for ChatGPT tab to become visible";
       } else if (automaticResumeDelayMs() > 0) {
         el("status").textContent = "Job finished · waiting for current turn to yield…";
       } else {
@@ -360,7 +364,8 @@
 
   async function prepareAndDispatch() {
     if (prepareUncertain || dispatchStartedAttempt || pendingFinish || tornDown
-      || hostTextMessageSupported === false || autoResumeSuppressed || autoResumeNotBeforeMs === null || Date.now() < autoResumeNotBeforeMs) return;
+      || hostTextMessageSupported === false || document.hidden || autoResumeSuppressed
+      || autoResumeNotBeforeMs === null || Date.now() < autoResumeNotBeforeMs) return;
     let response;
     try {
       response = await callTool("prepare_job_terminal_continuation", {
@@ -382,6 +387,16 @@
       // The response may have been malformed after the durable fence. Never guess
       // an automatic message and never dispatch until authoritative state reconciles it.
       prepareUncertain = true;
+      return;
+    }
+
+    // The tab may become hidden while prepare is in flight. A durable fence has
+    // already been crossed, so this attempt must not be silently reset to pending
+    // or redispatched later. Record uncertainty without sending ui/message.
+    if (document.hidden) {
+      dispatchStartedAttempt = attemptId;
+      hostDispatchFailureReason = "Tab hidden after prepare; Host dispatch intentionally skipped";
+      await finish(attemptId, "delivery_unknown");
       return;
     }
 

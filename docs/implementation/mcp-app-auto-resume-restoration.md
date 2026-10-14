@@ -51,6 +51,31 @@ verify its readiness projection. Restore its previous policy when the experiment
 ends. Historical Host observations are in the
 [continuation experiments](../agent/mcp-app-continuation-experiments.md).
 
+## Visibility-safe Job dispatch (experimental, not a Host wake)
+
+The diagnostic branch adds a visible-only guard to the **Job** continuation
+MCP App. If the iframe reports `document.hidden === true`, an already
+completed Job retains its durable `pending` Wait and **does not call**
+`prepare_job_terminal_continuation` or `ui/message`. A subsequent visible
+`visibilitychange` causes the App to re-read the exact Wait; a still-pending
+Wait may then be prepared and sent once. This protects against a known class of
+background `ui/message` ACKs that do not result in model execution.
+
+Visibility can change while the asynchronous durable `prepare` RPC is
+in flight. If the tab is hidden **after prepare has completed**, the App closes
+that attempt as `delivery_unknown` **without sending** `ui/message`.
+It must never pretend the one-shot fence was not crossed or automatically
+prepare again after becoming visible. Recovery is explicit; duplicated
+dispatch is forbidden. If `ui/message` has already been sent before hiding,
+the Host may still acknowledge it without executing a new model turn; this
+guard cannot alter an already-issued request or prove a future turn.
+
+This is deliberately a conservative **foreground-fallback** policy, not
+zero-click active background scheduling. Hidden iframe timers may be suspended
+or destroyed altogether. No Host native scheduling contract has been
+demonstrated by these synthetic tests. Do not loosen readiness or set
+`WEBCODEX_MCP_APP_RESUME_MODE=unattended` based on a green CI.
+
 ## Real ChatGPT matrix
 
 Run each case in a new test conversation with fresh identities. For Agent,
