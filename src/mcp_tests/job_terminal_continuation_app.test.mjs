@@ -250,7 +250,9 @@ test("prepare response loss reconciles authoritative prepared state without Host
   await view.reply(state, stateResult(preparedProjection, attemptId));
   const finish = calls(view, "finish_job_terminal_continuation").at(-1);
   assert.equal(finish.params.arguments.outcome, "delivery_unknown");
-  assert.equal(hostMessages(view).length, 0);
+  await view.reply(finish, finishResult("delivery_unknown"));
+  assert.match(view.nodes.status.textContent, /Prepare result uncertain; Host dispatch not confirmed/);
+  assert.equal(hostMessages(view).length, 0, "uncertain prepare never sends ui/message");
 });
 
 test("prepared state not dispatched by this View is finalized unknown without ui/message", async () => {
@@ -264,6 +266,9 @@ test("prepared state not dispatched by this View is finalized unknown without ui
   assert.equal(calls(view, "prepare_job_terminal_continuation").length, 0);
   const finish = calls(view, "finish_job_terminal_continuation")[0];
   assert.equal(finish.params.arguments.outcome, "delivery_unknown");
+  await view.reply(finish, finishResult("delivery_unknown"));
+  assert.match(view.nodes.status.textContent, /Prepared attempt not dispatched by this View/);
+  assert.equal(hostMessages(view).length, 0, "unowned prepared fence cannot redispatch");
 });
 
 test("teardown before prepare unbinds and leaves no Host dispatch", async () => {
@@ -341,4 +346,124 @@ test("hidden visibility uses bounded deterministic backoff and visible reset", a
   state = calls(view, "get_job_terminal_continuation_state").at(-1);
   await view.reply(state, stateResult(waiting));
   assert.ok([...view.timers.values()].some(timer => timer.delay === 15000));
+});
+
+test("Host bridge timeout labels the local uncertainty without creating retry authority", async () => {
+  const view = await initializedView();
+  await view.reply(calls(view, "bind_job_terminal_continuation")[0], bindResult(pending));
+  await view.reply(calls(view, "get_job_terminal_continuation_state")[0], stateResult(pending));
+  await view.reply(calls(view, "prepare_job_terminal_continuation")[0], prepareResult());
+  assert.equal(hostMessages(view).length, 1);
+  await view.fireTimers(10000);
+  const finish = calls(view, "finish_job_terminal_continuation").at(-1);
+  assert.equal(finish.params.arguments.outcome, "delivery_unknown");
+  await view.reply(finish, finishResult("delivery_unknown"));
+  assert.match(view.nodes.status.textContent, /Host bridge timed out after 10 seconds/);
+  assert.equal(hostMessages(view).length, 1, "timeout never licenses second ui/message");
+});
+
+test("Host ui/message explicit bridge error is distinguished without exposing raw host details", async () => {
+  const view = await initializedView();
+  await view.reply(calls(view, "bind_job_terminal_continuation")[0], bindResult(pending));
+  await view.reply(calls(view, "get_job_terminal_continuation_state")[0], stateResult(pending));
+  await view.reply(calls(view, "prepare_job_terminal_continuation")[0], prepareResult());
+  await view.reject(hostMessages(view)[0], { code: -32000, message: "sensitive private Host exception" });
+  const finish = calls(view, "finish_job_terminal_continuation").at(-1);
+  assert.equal(finish.params.arguments.outcome, "delivery_unknown");
+  await view.reply(finish, finishResult("delivery_unknown"));
+  assert.match(view.nodes.status.textContent, /Host returned a bridge error/);
+  assert.doesNotMatch(view.nodes.status.textContent, /sensitive private/);
+  assert.equal(hostMessages(view).length, 1);
+});
+
+test("late Host ui/message reply after 10-second timeout cannot create a second outcome", async () => {
+  const view = await initializedView();
+  await view.reply(calls(view, "bind_job_terminal_continuation")[0], bindResult(pending));
+  await view.reply(calls(view, "get_job_terminal_continuation_state")[0], stateResult(pending));
+  await view.reply(calls(view, "prepare_job_terminal_continuation")[0], prepareResult());
+  const original = hostMessages(view)[0];
+  assert.ok(original, "one original Host message exists");
+  await view.fireTimers(10000);
+  const finish = calls(view, "finish_job_terminal_continuation").at(-1);
+  assert.equal(finish.params.arguments.outcome, "delivery_unknown");
+  await view.reply(original, {}, "Host reply delivered after the local bridge timeout");
+  await view.reply(finish, finishResult("delivery_unknown"));
+  await view.fireTimers(3000);
+  assert.equal(hostMessages(view).length, 1, "late Host response cannot authorize redispatch");
+  assert.equal(calls(view, "finish_job_terminal_continuation").length, 1);
+  assert.match(view.nodes.status.textContent, /Host bridge timed out after 10 seconds/);
+});
+
+test("background visibility transition during ambiguous Host delivery never redispatches", async () => {
+  const view = await initializedView();
+  await view.reply(calls(view, "bind_job_terminal_continuation")[0], bindResult(pending));
+  await view.reply(calls(view, "get_job_terminal_continuation_state")[0], stateResult(pending));
+  await view.reply(calls(view, "prepare_job_terminal_continuation")[0], prepareResult());
+  assert.equal(hostMessages(view).length, 1);
+  await view.visibility(true);
+  await view.fireTimers(10000);
+  const finish = calls(view, "finish_job_terminal_continuation").at(-1);
+  assert.equal(finish.params.arguments.outcome, "delivery_unknown");
+  await view.reply(finish, finishResult("delivery_unknown"));
+  await view.visibility(false);
+  await view.fireTimers(3000);
+  assert.equal(hostMessages(view).length, 1, "visibility cannot resend an uncertain Host message");
+  assert.equal(calls(view, "prepare_job_terminal_continuation").length, 1);
+});
+
+test("Host delivered with a 2608-second lag reports delay but never claims a new model turn", async () => {
+  const view = await boundWaitingView();
+  await view.fireTimers(3000);
+  const poll = calls(view, "get_job_terminal_continuation_state").at(-1);
+  await view.reply(poll, stateResult({
+    ...pending,
+    delivery_state: "delivered",
+    terminal_to_delivery_settlement_seconds: 2608,
+  }));
+  assert.match(view.nodes.status.textContent, /43m 28s after Job/);
+  assert.match(view.nodes.status.textContent, /new ChatGPT turn unverified/);
+  assert.equal(hostMessages(view).length, 0);
+  assert.equal(view.timers.size, 0);
+});
+
+test("malformed and unsettled latency never appears as a settlement fact", async () => {
+  for (const invalid of [-1, "2608", Number.POSITIVE_INFINITY, 58]) {
+    const view = await boundWaitingView();
+    await view.fireTimers(3000);
+    const poll = calls(view, "get_job_terminal_continuation_state").at(-1);
+    await view.reply(poll, stateResult({
+      ...pending,
+      delivery_state: "delivered",
+      terminal_to_delivery_settlement_seconds: invalid,
+    }));
+    assert.doesNotMatch(view.nodes.status.textContent, /settled/);
+    assert.match(view.nodes.status.textContent, /new ChatGPT turn unverified/);
+    assert.equal(hostMessages(view).length, 0);
+  }
+});
+
+test("frozen 2608-second background cannot dispatch until visibility resumes (diagnostic reproduction)", async () => {
+  const view = await boundWaitingView();
+  await view.visibility(true);
+  const hiddenPoll = calls(view, "get_job_terminal_continuation_state").at(-1);
+  await view.reply(hiddenPoll, stateResult(waiting));
+  const expectedHiddenTimer = [...view.timers.values()];
+  assert.ok(expectedHiddenTimer.some(timer => timer.delay === 15000));
+  const before = calls(view, "get_job_terminal_continuation_state").length;
+  view.advanceTime(2608000); // Simulates a suspended iframe: no timer callbacks.
+  assert.equal(calls(view, "get_job_terminal_continuation_state").length, before);
+  assert.equal(hostMessages(view).length, 0);
+
+  await view.visibility(false); // Browser tab becomes visible again.
+  const resumedPoll = calls(view, "get_job_terminal_continuation_state").at(-1);
+  assert.equal(calls(view, "get_job_terminal_continuation_state").length, before + 1);
+  await view.reply(resumedPoll, stateResult(pending));
+  const prepare = calls(view, "prepare_job_terminal_continuation").at(-1);
+  assert.ok(prepare, "foreground transition can recover a pending Wait");
+  await view.reply(prepare, prepareResult());
+  assert.equal(hostMessages(view).length, 1, "exactly one Host dispatch attempt");
+  await view.reply(hostMessages(view)[0], {});
+  const finish = calls(view, "finish_job_terminal_continuation").at(-1);
+  await view.reply(finish, finishResult("delivered"));
+  assert.equal(hostMessages(view).length, 1);
 });
