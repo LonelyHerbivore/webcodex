@@ -8,10 +8,16 @@ const MATRIX = Object.freeze([
 export const HOST_CONTINUATION_CASES = MATRIX;
 const isObject = value => !!value && typeof value === "object" && !Array.isArray(value);
 const identity = value => typeof value === "string" && /^[a-zA-Z0-9_:-]{1,128}$/.test(value);
-const timestamp = value =>
-  typeof value === "string" && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?Z$/.test(value)
-    && Number.isFinite(Date.parse(value))
-    ? Date.parse(value) : null;
+const timestamp = value => {
+  if (typeof value !== "string"
+      || !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?Z$/.test(value)) return null;
+  const ms = Date.parse(value);
+  if (!Number.isFinite(ms)) return null;
+  // Reject normalized invalid calendar dates (e.g. February 30) and 24:00:00.
+  let canonicalInput = value.replace(/\.(\d{1,2})Z$/, (_, digits) => "." + digits.padEnd(3, "0") + "Z");
+  if (!canonicalInput.includes(".")) canonicalInput = canonicalInput.slice(0, -1) + ".000Z";
+  return new Date(ms).toISOString() === canonicalInput ? ms : null;
+};
 
 export function assessHostContinuationCase(sample) {
   const problems = [];
@@ -70,7 +76,7 @@ export function assessHostContinuationCase(sample) {
   }
   // A continuation in another session or with a fabricated tool event must
   // not pass even when its host ACK is present.
-  return { caseId: typeof caseId === "string" ? caseId : null,
+  return { caseId: MATRIX.includes(caseId) ? caseId : null,
     mechanicallyConsistent: problems.length === 0, problems, hostVerified: false };
 }
 
