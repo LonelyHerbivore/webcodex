@@ -4,20 +4,27 @@ import { assessHostContinuationCase, assessHostContinuationMatrix, HOST_CONTINUA
 
 const fixture = caseId => {
   const kind = caseId.startsWith("job.") ? "job" : "agent";
+  const timePrefix = caseId.includes(".long.") ? "10:05:" : "10:00:";
+  const second = caseId.includes(".long.") ? "00" : "30";
   return {
     caseId, conversationKey: "conversation_fixture", principalKey: "principal_fixture",
-    originalTurn: { id: "turn_original", finalAt: "2026-10-14T10:00:00Z" },
+    originalTurn: { id: "turn_original", conversationKey: "conversation_fixture", finalAt: "2026-10-14T10:00:00Z" },
+    hostEnvironment: { visibilityAtTrigger: caseId.split(".")[2] },
     trigger: { eventId: "event_fixture", principalKey: "principal_fixture",
-      at: "2026-10-14T10:00:30Z", jobId: "job_fixture", wakeId: "wake_fixture" },
+      at: `2026-10-14T${timePrefix}${second}Z`, jobId: "job_fixture", wakeId: "wake_fixture" },
     hostDispatch: { eventId: "event_fixture", outcome: "dispatch_accepted",
-      preparedAt: "2026-10-14T10:00:31Z", acceptedAt: "2026-10-14T10:00:32Z" },
+      preparedAt: `2026-10-14T${timePrefix}${caseId.includes(".long.") ? "01" : "31"}Z`,
+      acceptedAt: `2026-10-14T${timePrefix}${caseId.includes(".long.") ? "02" : "32"}Z` },
     freshTurn: { id: "turn_fresh", eventId: "event_fixture",
       conversationKey: "conversation_fixture", source: "host_turn_trace",
-      initiatedWithoutUserAction: true, startedAt: "2026-10-14T10:00:33Z" },
+      initiatedWithoutUserAction: true,
+      startedAt: `2026-10-14T${timePrefix}${caseId.includes(".long.") ? "03" : "33"}Z` },
     continuation: { source: "model_tool_trace", eventId: "event_fixture",
       turnId: "turn_fresh", tool: kind === "job" ? "observe_jobs" : "consume_agent_wake",
-      jobId: "job_fixture", wakeId: "wake_fixture", at: "2026-10-14T10:00:34Z" },
+      jobId: "job_fixture", wakeId: "wake_fixture",
+      at: `2026-10-14T${timePrefix}${caseId.includes(".long.") ? "04" : "34"}Z` },
     userActionsAfterFinal: 0, duplicateDispatchCount: 0, duplicateWorkerStartCount: 0,
+    duplicateFreshTurnCount: 0,
   };
 };
 const edit = (caseId, fn) => { const value = fixture(caseId); fn(value); return value; };
@@ -53,6 +60,7 @@ test("a user-initiated turn or message is not zero-click wake", () => {
 test("different conversation, principal, wake or turn ID never correlates", () => {
   const changes = [
     ["conversation_mismatch", s => { s.freshTurn.conversationKey = "conversation_other"; }],
+    ["original_conversation_mismatch", s => { s.originalTurn.conversationKey = "conversation_other"; }],
     ["principal_mismatch", s => { s.trigger.principalKey = "principal_other"; }],
     ["event_mismatch", s => { s.hostDispatch.eventId = "event_other"; }],
     ["fresh_turn_event_mismatch", s => { s.freshTurn.eventId = "event_other"; }],
@@ -81,6 +89,7 @@ test("ambiguous delivery, duplicate starts and duplicate dispatches fail closed"
     ["host_dispatch_not_accepted", s => { s.hostDispatch.outcome = "delivery_unknown"; }],
     ["duplicate_side_effect_not_ruled_out", s => { s.duplicateWorkerStartCount = 1; }],
     ["duplicate_side_effect_not_ruled_out", s => { s.duplicateDispatchCount = 1; }],
+    ["duplicate_side_effect_not_ruled_out", s => { s.duplicateFreshTurnCount = 1; }],
     ["duplicate_side_effect_not_ruled_out", s => { delete s.duplicateWorkerStartCount; }],
   ];
   for (const [expected, change] of changes) assert.ok(
@@ -112,4 +121,13 @@ test("matrix rejects missing, duplicate and malformed cases", () => {
   assert.deepEqual(duplicated.duplicateCases,["agent.short.foreground"]);
   assert.equal(assessHostContinuationCase(null).hostVerified,false);
   assert.equal(assessHostContinuationMatrix(null).hostVerified,false);
+});
+
+test("each case must match visibility and actual clock delay, not just a label", () => {
+  const short = edit("job.short.foreground", s => { s.hostEnvironment.visibilityAtTrigger = "background"; });
+  assert.ok(assessHostContinuationCase(short).problems.includes("visibility_mismatch"));
+  const mislabeled = edit("agent.long.background", s => { s.trigger.at = "2026-10-14T10:00:30Z"; });
+  assert.ok(assessHostContinuationCase(mislabeled).problems.includes("wrong_delay_window"));
+  const tooQuick = edit("job.short.foreground", s => { s.trigger.at = "2026-10-14T10:00:05Z"; });
+  assert.ok(assessHostContinuationCase(tooQuick).problems.includes("wrong_delay_window"));
 });
