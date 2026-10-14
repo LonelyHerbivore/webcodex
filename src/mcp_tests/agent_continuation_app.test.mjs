@@ -77,7 +77,7 @@ function projectContinuationByPublishedSchema(value) {
 
 async function boundView(options = { deliverToolMeta: false }) {
   const view = app("mcp_agent_continuation_app.html", options);
-  await view.initialize();
+  await view.initialize("success", options.hostCapabilities);
   view.toolInput(input);
   await flush();
   await view.reply(view.calls("bind_agent_continuation").at(-1), toolResult({ agent_continuation: projection }));
@@ -783,10 +783,15 @@ test("input-only background carrier keeps bounded heartbeat cadence", async () =
   assert.equal(view.calls("get_agent_continuation_state").length, 2);
 });
 
-test("input-only hidden carrier acquires prepares and dispatches exactly once", async () => {
+test("input-only hidden carrier defers dispatch until visible and sends once", async () => {
   const view = await boundView();
   await view.visibility(true);
   await view.reply(view.calls("get_agent_continuation_state")[0], toolResult({ agent_continuation: projection }));
+  assert.equal(view.calls("acquire_agent_continuation_wake").length, 0);
+  assert.equal(view.calls("prepare_agent_continuation_wake").length, 0);
+  assert.equal(hostMessages(view).length, 0);
+  await view.visibility(false);
+  await view.reply(view.calls("get_agent_continuation_state").at(-1), toolResult({ agent_continuation: projection }));
   assert.equal(view.calls("acquire_agent_continuation_wake").length, 1);
   await view.reply(view.calls("acquire_agent_continuation_wake")[0], toolResult({ wake }));
   assert.equal(view.calls("prepare_agent_continuation_wake").length, 1);
@@ -846,26 +851,29 @@ for (const outcome of ["success", "error", "timeout"]) {
   }
 }
 
-test("visible to hidden transition during prepare still dispatches exactly once", async () => {
+test("visible to hidden during Agent prepare conservatively finishes unknown", async () => {
   const view = await boundView();
   await view.reply(view.calls("get_agent_continuation_state").at(-1), toolResult({ agent_continuation: projection }));
   await view.reply(view.calls("acquire_agent_continuation_wake").at(-1), toolResult({ wake }));
   const prepareCall = view.calls("prepare_agent_continuation_wake").at(-1);
   await view.visibility(true);
   await view.reply(prepareCall, prepared());
-  assert.equal(hostMessages(view).length, 1);
-  await view.reply(hostMessages(view)[0], {});
-  assert.equal(view.calls("finish_agent_continuation_wake").at(-1).params.arguments.outcome, "dispatch_accepted");
-  assert.equal(hostMessages(view).length, 1);
+  assert.equal(hostMessages(view).length, 0, "hidden View cannot request ui/message after durable prepare");
+  const finish = view.calls("finish_agent_continuation_wake").at(-1);
+  assert.equal(finish.params.arguments.outcome, "delivery_unknown");
+  await view.reply(finish, toolResult({}));
+  await view.visibility(false);
+  assert.equal(hostMessages(view).length, 0, "foreground cannot replay prepared Attempt");
+  assert.equal(view.calls("prepare_agent_continuation_wake").length, 1);
 });
 
-test("hidden to visible transition during Host dispatch never duplicates ui/message", async () => {
+test("hidden to visible transition while Host dispatch already started cannot duplicate", async () => {
   const view = await boundView();
-  await view.visibility(true);
   await view.reply(view.calls("get_agent_continuation_state").at(-1), toolResult({ agent_continuation: projection }));
   await view.reply(view.calls("acquire_agent_continuation_wake").at(-1), toolResult({ wake }));
   await view.reply(view.calls("prepare_agent_continuation_wake").at(-1), prepared());
   assert.equal(hostMessages(view).length, 1);
+  await view.visibility(true);
   await view.visibility(false);
   assert.equal(hostMessages(view).length, 1);
   await view.reply(hostMessages(view)[0], {});
@@ -873,6 +881,42 @@ test("hidden to visible transition during Host dispatch never duplicates ui/mess
   assert.equal(hostMessages(view).length, 1);
 });
 
+test("hidden Agent view preserves pending Wake without acquire or prepare", async () => {
+  const view = await boundView();
+  await view.visibility(true);
+  const state = view.calls("get_agent_continuation_state").at(-1);
+  await view.reply(state, toolResult({ agent_continuation: projection }));
+  assert.equal(view.calls("acquire_agent_continuation_wake").length, 0);
+  assert.equal(view.calls("prepare_agent_continuation_wake").length, 0);
+  assert.equal(hostMessages(view).length, 0);
+  assert.match(view.nodes.status.textContent, /waiting for ChatGPT tab to become visible/);
+  await view.visibility(false);
+  const resumed = view.calls("get_agent_continuation_state").at(-1);
+  await view.reply(resumed, toolResult({ agent_continuation: projection }));
+  assert.equal(view.calls("acquire_agent_continuation_wake").length, 1);
+  await view.reply(view.calls("acquire_agent_continuation_wake").at(-1), toolResult({ wake }));
+  await view.reply(view.calls("prepare_agent_continuation_wake").at(-1), prepared());
+  assert.equal(hostMessages(view).length, 1);
+  await view.reply(hostMessages(view)[0], {});
+  await view.reply(view.calls("finish_agent_continuation_wake").at(-1), toolResult({}));
+  assert.equal(view.calls("prepare_agent_continuation_wake").length, 1);
+});
+
+test("Agent View hidden after acquire response does not cross prepare fence", async () => {
+  const view = await boundView();
+  await view.reply(view.calls("get_agent_continuation_state").at(-1), toolResult({ agent_continuation: projection }));
+  const acquireCall = view.calls("acquire_agent_continuation_wake").at(-1);
+  await view.visibility(true);
+  await view.reply(acquireCall, toolResult({ wake }));
+  assert.equal(view.calls("prepare_agent_continuation_wake").length, 0);
+  assert.equal(hostMessages(view).length, 0);
+  await view.visibility(false);
+  const stateCall = view.calls("get_agent_continuation_state").at(-1);
+  await view.reply(stateCall, toolResult({ agent_continuation: projection }));
+  const reacquire = view.calls("acquire_agent_continuation_wake").at(-1);
+  assert.ok(reacquire);
+  assert.equal(view.calls("prepare_agent_continuation_wake").length, 0, "only visible re-acquire may advance");
+});
 test("teardown before a prepare response never dispatches a Host message", async () => {
   const view = await boundView();
   await view.reply(view.calls("get_agent_continuation_state").at(-1), toolResult({ agent_continuation: projection }));
@@ -885,7 +929,6 @@ test("teardown before a prepare response never dispatches a Host message", async
 
 test("Host dispatch rejection after prepare is unknown and never resent", async () => {
   const view = await boundView();
-  await view.visibility(true);
   await view.reply(view.calls("get_agent_continuation_state").at(-1), toolResult({ agent_continuation: projection }));
   await view.reply(view.calls("acquire_agent_continuation_wake").at(-1), toolResult({ wake }));
   await view.reply(view.calls("prepare_agent_continuation_wake").at(-1), prepared());
@@ -1451,4 +1494,36 @@ test("Agent Wait sparse reference still requires the exact durable target on App
   assert.equal(view.nodes.status.textContent, "Invalid or conflicting Wait identity");
   assert.notEqual(view.nodes.waitSummary?.hidden, false);
   assert.equal(hostMessages(view).length, 0);
+});
+
+test("Agent Host explicit missing text capability leaves Wake unclaimed", async () => {
+  for (const hostCapabilities of [{}, { message: { image: {} } }, { message: null }]) {
+    const view = await boundView({ hostCapabilities, deliverToolMeta: false });
+    await view.reply(view.calls("get_agent_continuation_state").at(-1), toolResult({ agent_continuation: projection }));
+    assert.equal(view.calls("acquire_agent_continuation_wake").length, 0);
+    assert.equal(view.calls("prepare_agent_continuation_wake").length, 0);
+    assert.equal(hostMessages(view).length, 0);
+    assert.match(view.nodes.status.textContent, /Host text message capability unavailable/);
+  }
+});
+
+test("Agent Host positive text capability allows visible one-shot dispatch", async () => {
+  const view = await boundView({ hostCapabilities: { message: { text: {} } }, deliverToolMeta: false });
+  await view.reply(view.calls("get_agent_continuation_state").at(-1), toolResult({ agent_continuation: projection }));
+  assert.equal(view.calls("acquire_agent_continuation_wake").length, 1);
+  await view.reply(view.calls("acquire_agent_continuation_wake").at(-1), toolResult({ wake }));
+  await view.reply(view.calls("prepare_agent_continuation_wake").at(-1), prepared());
+  assert.equal(hostMessages(view).length, 1);
+  await view.reply(hostMessages(view)[0], {});
+  const finishCall = view.calls("finish_agent_continuation_wake").at(-1);
+  assert.equal(finishCall.params.arguments.outcome, "dispatch_accepted");
+});
+
+test("legacy Agent Host omitting capabilities retains compatibility without new-turn proof", async () => {
+  const view = await boundView();
+  await view.reply(view.calls("get_agent_continuation_state").at(-1), toolResult({ agent_continuation: projection }));
+  assert.equal(view.calls("acquire_agent_continuation_wake").length, 1);
+  await view.reply(view.calls("acquire_agent_continuation_wake").at(-1), toolResult({ wake }));
+  await view.reply(view.calls("prepare_agent_continuation_wake").at(-1), prepared());
+  assert.equal(hostMessages(view).length, 1);
 });

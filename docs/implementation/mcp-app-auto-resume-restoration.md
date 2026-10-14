@@ -76,6 +76,37 @@ or destroyed altogether. No Host native scheduling contract has been
 demonstrated by these synthetic tests. Do not loosen readiness or set
 `WEBCODEX_MCP_APP_RESUME_MODE=unattended` based on a green CI.
 
+## Visibility-safe Agent Wake delivery (experimental)
+
+The Agent continuation MCP App now uses the same conservative foreground
+fallback principle as the Job card. When the iframe's `document.hidden` is
+true, its controller may continue read-only heartbeat and lease recovery,
+but it must **not acquire a new Agent Wake**, cross the durable
+`prepare_agent_continuation_wake` fence or invoke `ui/message`. The card
+reports an Agent Wake waiting for the ChatGPT tab to become visible.
+When visibility returns, the App re-reads the exact Agent/Endpoint generation
+and may acquire and prepare that still-authorized Wake at most once.
+
+A hidden transition is also checked after `acquire` and **after the
+asynchronous prepare response**, not just at the beginning of reconciliation.
+If prepare has already crossed its durable fence when the tab becomes hidden,
+the Attempt is closed as `delivery_unknown` without sending an unattended
+Host message. Visibility restoration must never replay that Attempt. If a
+message was already sent before the visibility change, its ACK is still only
+transport acceptance and cannot prove a fresh model turn.
+
+On `ui/initialize`, explicit Host capabilities without
+`hostCapabilities.message.text` prevent the Agent from acquiring or
+preparing a Wake. A legacy Host that omits the capability envelope is treated
+as unknown (compatibility behavior), **not** as proven Host scheduling
+support. Even if the Host advertises text delivery, there is no guarantee it
+will start a model turn in a background tab.
+
+The local Agent MCP App tests verify these safety invariants, but only a
+six-case real-Host test with independent `fresh_turn_started` and matching
+`consume_agent_wake` traces can establish unattended Agent continuation.
+This change does **not** install a native Host Push Adapter.
+
 ## Real ChatGPT matrix
 
 Run each case in a new test conversation with fresh identities. For Agent,
