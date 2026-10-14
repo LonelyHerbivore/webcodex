@@ -82,7 +82,7 @@ export function assessHostContinuationCase(sample) {
 
 export function assessHostContinuationMatrix(samples) {
   if (!Array.isArray(samples)) return { mechanicallyConsistent: false, hostVerified: false,
-    missingCases: [...MATRIX], duplicateCases: [], results: [] };
+    missingCases: [...MATRIX], duplicateCases: [], duplicateEvidenceFields: [], results: [] };
   const seen = new Set();
   const duplicates = new Set();
   const results = samples.map(sample => {
@@ -93,10 +93,24 @@ export function assessHostContinuationMatrix(samples) {
     return assessHostContinuationCase(sample);
   });
   const missingCases = MATRIX.filter(x => !seen.has(x));
+  // The official six probes require fresh conversations, turns, and events.
+  // A replayed single successful sample must not satisfy multiple matrix rows.
+  const identifiers = [
+    ["conversationKey", x => x?.conversationKey],
+    ["originalTurn.id", x => x?.originalTurn?.id],
+    ["freshTurn.id", x => x?.freshTurn?.id],
+    ["trigger.eventId", x => x?.trigger?.eventId],
+  ];
+  const duplicateEvidenceFields = [];
+  for (const [field, read] of identifiers) {
+    const values = samples.map(read).filter(identity);
+    if (new Set(values).size !== values.length) duplicateEvidenceFields.push(field);
+  }
   return {
     mechanicallyConsistent: missingCases.length === 0 && duplicates.size === 0
+      && duplicateEvidenceFields.length === 0
       && results.length === MATRIX.length && results.every(x => x.mechanicallyConsistent),
     hostVerified: false, // Requires independently authenticated real-Host audit.
-    missingCases, duplicateCases: [...duplicates].sort(), results,
+    missingCases, duplicateCases: [...duplicates].sort(), duplicateEvidenceFields, results,
   };
 }
