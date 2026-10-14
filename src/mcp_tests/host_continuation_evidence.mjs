@@ -27,6 +27,9 @@ export function assessHostContinuationCase(sample) {
   const consumed = sample.continuation;
   if (![original, trigger, dispatch, fresh, consumed].every(isObject)) add("missing_independent_event");
   if (!identity(sample.conversationKey) || !identity(sample.principalKey)) add("missing_scope");
+  if (!identity(original?.conversationKey) || original?.conversationKey !== sample.conversationKey) add("original_conversation_mismatch");
+  const visibility = isObject(sample.hostEnvironment) ? sample.hostEnvironment.visibilityAtTrigger : null;
+  if (caseId && MATRIX.includes(caseId) && visibility !== caseId.split(".")[2]) add("visibility_mismatch");
   if (!identity(original?.id) || !identity(fresh?.id) || original?.id === fresh?.id) add("turn_identity_missing_or_reused");
   if (!identity(fresh?.conversationKey) || fresh?.conversationKey !== sample.conversationKey) add("conversation_mismatch");
   if (!identity(trigger?.principalKey) || trigger?.principalKey !== sample.principalKey) add("principal_mismatch");
@@ -40,7 +43,8 @@ export function assessHostContinuationCase(sample) {
   if (fresh?.source !== "host_turn_trace" || consumed?.source !== "model_tool_trace") add("missing_independent_traces");
   if (fresh?.initiatedWithoutUserAction !== true || sample.userActionsAfterFinal !== 0) add("not_zero_click");
   if (dispatch?.outcome !== "dispatch_accepted") add("host_dispatch_not_accepted");
-  if (sample.duplicateDispatchCount !== 0 || sample.duplicateWorkerStartCount !== 0) add("duplicate_side_effect_not_ruled_out");
+  if (sample.duplicateDispatchCount !== 0 || sample.duplicateWorkerStartCount !== 0
+      || sample.duplicateFreshTurnCount !== 0) add("duplicate_side_effect_not_ruled_out");
 
   if (kind === "job") {
     if (consumed?.tool !== "observe_jobs" || !identity(trigger?.jobId)
@@ -55,7 +59,15 @@ export function assessHostContinuationCase(sample) {
     fresh?.startedAt, consumed?.at,
   ].map(timestamp);
   if (ordered.some(x => x === null)) add("invalid_utc_timestamp");
-  else if (ordered.some((x, i) => i > 0 && x < ordered[i - 1])) add("event_time_order");
+  else {
+    if (ordered.some((x, i) => i > 0 && x < ordered[i - 1])) add("event_time_order");
+    // The published six-case Host matrix distinguishes ~30s from ~5min.
+    // A foreground short probe must not be counted as a background long probe.
+    const delay = (ordered[1] - ordered[0]) / 1000;
+    const duration = typeof caseId === "string" ? caseId.split(".")[1] : null;
+    if (duration === "short" && (delay < 15 || delay > 120)) add("wrong_delay_window");
+    if (duration === "long" && (delay < 240 || delay > 900)) add("wrong_delay_window");
+  }
   // A continuation in another session or with a fabricated tool event must
   // not pass even when its host ACK is present.
   return { caseId: typeof caseId === "string" ? caseId : null,
