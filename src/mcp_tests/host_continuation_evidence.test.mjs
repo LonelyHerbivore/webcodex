@@ -1,5 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { assessHostContinuationCase, assessHostContinuationMatrix, HOST_CONTINUATION_CASES } from "./host_continuation_evidence.mjs";
 
 const fixture = caseId => {
@@ -172,4 +174,25 @@ test("six-case matrix rejects reused conversations and event IDs", () => {
   assert.ok(result.duplicateEvidenceFields.includes("conversationKey"));
   assert.ok(result.duplicateEvidenceFields.includes("trigger.eventId"));
   assert.equal(result.hostVerified,false);
+});
+
+test("offline audit CLI returns sanitized outcomes and distinct exit codes", () => {
+  const cli = fileURLToPath(new URL("../../scripts/assess_host_continuation_evidence.mjs", import.meta.url));
+  const valid = HOST_CONTINUATION_CASES.map(fixture);
+  const success = spawnSync(process.execPath,[cli],{input:JSON.stringify(valid),encoding:"utf8"});
+  assert.equal(success.status,0,success.stderr);
+  const parsed = JSON.parse(success.stdout);
+  assert.equal(parsed.mechanicallyConsistent,true);
+  assert.equal(parsed.hostVerified,false);
+  assert.equal(success.stdout.includes("principal_fixture"),false);
+  assert.equal(success.stdout.includes("conversation_fixture"),false);
+
+  const incomplete = spawnSync(process.execPath,[cli],{input:JSON.stringify(valid.slice(0,1)),encoding:"utf8"});
+  assert.equal(incomplete.status,1);
+  assert.equal(JSON.parse(incomplete.stdout).mechanicallyConsistent,false);
+
+  const malformed = spawnSync(process.execPath,[cli],{input:"not-json",encoding:"utf8"});
+  assert.equal(malformed.status,2);
+  assert.equal(malformed.stdout,"");
+  assert.match(malformed.stderr,/Invalid host continuation evidence JSON/);
 });
