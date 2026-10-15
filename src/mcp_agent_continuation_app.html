@@ -634,7 +634,14 @@ h1 { margin: 0; font-size: 15px; font-weight: 650; overflow-wrap: anywhere; }
     const projection = projectionOf(response);
     if (!toolCallSucceeded(response) || !projection || !acceptIdentity(projection)) {
       const structured = structuredOf(response);
-      if (structured && structured.success === false) throw new Error("Continuation state was not accepted");
+      if (structured && structured.success === false) {
+        // Only an authoritative expiry permits Endpoint successor recovery.
+        // Stale binding, storage, permission and other business errors must
+        // not enter a potentially mutating recovery path.
+        throw Object.assign(new Error("Continuation state was not accepted"), {
+          endpointExpired: structured.output?.error_kind === "endpoint_expired",
+        });
+      }
       throw malformedResult(response);
     }
     if (restartRecoveryOf(projection)) {
@@ -861,15 +868,14 @@ h1 { margin: 0; font-size: 15px; font-weight: 650; overflow-wrap: anywhere; }
           el("status").textContent = "Connection interrupted · retrying…";
           return;
         }
-        const recovered = await recoverExpiredEndpoint();
-        if (recovered) {
-          void maybeStartBinding();
-        } else if (!tornDown && endpointRecoveryProbeEpoch !== identityEpoch) {
-          const diagnostic = hostFailureDiagnostic(error);
+        if (error?.endpointExpired === true) {
+          const recovered = await recoverExpiredEndpoint();
+          if (recovered) void maybeStartBinding();
+        } else {
+          // Unverified failure is not Endpoint expiry. Preserve the original
+          // generation, View binding and prepared/dispatch fences for the next read.
           el("binding").textContent = "Reconnecting";
-          el("status").textContent = diagnostic
-            ? `Reconnecting · ${diagnostic}`
-            : "Reconnecting…";
+          el("status").textContent = "Reconnecting…";
         }
       }
     } finally {
