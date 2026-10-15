@@ -134,9 +134,18 @@ recovered.
   rather than exhausting all recovery attempts and dropping pending work.
   A canonical expiry result still allows the existing exact-successor
   recovery with identity/generation validation.
-- **One-shot safety:** Once a prepare fence might have been crossed, a lost
-  response is still `delivery_unknown`; it is never reset to `pending`
-  or treated as authority to prepare or send again. Host `ui/message` ACK
+- **Agent prepare recovery after response loss:** A locally uncertain
+  `prepare_agent_continuation_wake` may be retried only for the **same**
+  Wake ID, Attempt ID, generation, and secure View binding after both a fresh
+  authoritative heartbeat and the subsequent Server acquire confirm that
+  exact Attempt remains `claimed` and has no prepare/dispatch observation.
+  The retried request keeps the exact operation identity. A `pending`
+  heartbeat, different Attempt, or `dispatch_prepared` is not authorization
+  to retry. When `dispatch_prepared` is observed, finish the original
+  attempt as `delivery_unknown` without Host `ui/message`.
+- **One-shot safety:** A prepare whose fence has actually been crossed
+  remains subject to `delivery_unknown`; it is never reset to `pending`
+  or treated as authority to send another Host message. Host `ui/message` ACK
   is not fresh-turn proof; no Orca Worker is started by these Views.
 
 The Node simulated-Host regression suite covers state timeouts, proven
