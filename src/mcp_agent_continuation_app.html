@@ -594,7 +594,8 @@ h1 { margin: 0; font-size: 15px; font-weight: 650; overflow-wrap: anywhere; }
       timer = null;
       if (scheduledEpoch !== identityEpoch) return scheduleNext();
       if (bindingId) void reconcile(); else void maybeStartBinding();
-    }, document.hidden ? HIDDEN_HEARTBEAT_MS : VISIBLE_POLL_MS);
+    }, document.hidden || (!bindingId && bindAttempts >= MAX_BIND_ATTEMPTS)
+      ? HIDDEN_HEARTBEAT_MS : VISIBLE_POLL_MS);
   }
 
   async function bind() {
@@ -633,7 +634,14 @@ h1 { margin: 0; font-size: 15px; font-weight: 650; overflow-wrap: anywhere; }
     const projection = projectionOf(response);
     if (!toolCallSucceeded(response) || !projection || !acceptIdentity(projection)) {
       const structured = structuredOf(response);
-      if (structured && structured.success === false) throw new Error("Continuation state was not accepted");
+      if (structured && structured.success === false) {
+        // Only an authoritative expiry permits Endpoint successor recovery.
+        // Stale binding, storage, permission and other business errors must
+        // not enter a potentially mutating recovery path.
+        throw Object.assign(new Error("Continuation state was not accepted"), {
+          endpointExpired: structured.output?.error_kind === "endpoint_expired",
+        });
+      }
       throw malformedResult(response);
     }
     if (restartRecoveryOf(projection)) {
@@ -832,6 +840,18 @@ h1 { margin: 0; font-size: 15px; font-weight: 650; overflow-wrap: anywhere; }
         }
         return;
       }
+      if (prepareUncertain === wake.attempt_id) {
+        // Only a fresh, authoritative Server read AND acquisition confirming
+        // the very same Wake/Attempt is still claimed and unprepared can clear
+        // a locally uncertain prepare. A stale pending projection, different
+        // Wake or crossed prepare fence must never authorize another request.
+        if (projection.wake?.wake_id !== wake.wake_id
+          || projection.wake.state !== "claimed"
+          || projection.dispatch_observation !== null
+          || wake.state !== "claimed"
+          || wake.dispatch_observation !== null) return;
+        prepareUncertain = null;
+      }
       await dispatchWake(wake);
     } catch (error) {
       if (!tornDown && error && error.recoverableBindingLoss === true && recoveryRebinds < MAX_RECOVERY_REBINDS) {
@@ -840,15 +860,22 @@ h1 { margin: 0; font-size: 15px; font-weight: 650; overflow-wrap: anywhere; }
         el("binding").textContent = "Reconnecting";
         el("status").textContent = "Reconnecting…";
       } else if (!tornDown) {
-        const recovered = await recoverExpiredEndpoint();
-        if (recovered) {
-          void maybeStartBinding();
-        } else if (!tornDown && endpointRecoveryProbeEpoch !== identityEpoch) {
-          const diagnostic = hostFailureDiagnostic(error);
+        // Host bridge timeouts/rejections are not evidence of Endpoint expiry.
+        // Recovery may rotate generation, so only attempt it on authoritative
+        // semantic failures; a transient outage keeps the exact bound identity.
+        if (["bridge-error", "bridge-timeout", "bridge-cancelled"].includes(error?.hostFailureKind)) {
           el("binding").textContent = "Reconnecting";
-          el("status").textContent = diagnostic
-            ? `Reconnecting · ${diagnostic}`
-            : "Reconnecting…";
+          el("status").textContent = "Connection interrupted · retrying…";
+          return;
+        }
+        if (error?.endpointExpired === true) {
+          const recovered = await recoverExpiredEndpoint();
+          if (recovered) void maybeStartBinding();
+        } else {
+          // Unverified failure is not Endpoint expiry. Preserve the original
+          // generation, View binding and prepared/dispatch fences for the next read.
+          el("binding").textContent = "Reconnecting";
+          el("status").textContent = "Reconnecting…";
         }
       }
     } finally {
@@ -910,7 +937,11 @@ h1 { margin: 0; font-size: 15px; font-weight: 650; overflow-wrap: anywhere; }
     } catch (error) {
       if (!tornDown) {
         const diagnostic = hostFailureDiagnostic(error);
-        if (!error.definitive && bindAttempts < MAX_BIND_ATTEMPTS) {
+        if (!error.definitive && (["bridge-error", "bridge-timeout", "bridge-cancelled"].includes(error?.hostFailureKind)
+          || bindAttempts < MAX_BIND_ATTEMPTS)) {
+          // A transport outage is not proof of Endpoint expiry. Keep the
+          // exact View binding fence and reduce retries to 15s after
+          // repeated failed Host bridge operations.
           bindingStarted = false;
           el("status").textContent = diagnostic
             ? `Connection interrupted · ${diagnostic} · retrying…`

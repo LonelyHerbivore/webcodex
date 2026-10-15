@@ -286,10 +286,17 @@
   async function bind() {
     if (!hostInitialized || !waitId || !viewBindingId || tornDown) return false;
     bindAttempted = true;
-    const response = await callTool("bind_job_terminal_continuation", {
-      wait_id: waitId,
-      binding_id: viewBindingId,
-    });
+    let response;
+    try {
+      response = await callTool("bind_job_terminal_continuation", {
+        wait_id: waitId,
+        binding_id: viewBindingId,
+      });
+    } catch (_) {
+      // Bridge timeout/rejection is not authoritative evidence that the
+      // process binding has been retired. Keep the same View fence for recovery.
+      throw Object.assign(new Error("Job Host bridge unavailable"), { transientHostTransport: true });
+    }
     const output = outputOf(response);
     const value = projectionOf(response);
     if (!toolCallSucceeded(response) || !output || !value
@@ -304,15 +311,31 @@
 
   async function state() {
     if (!waitId || !bindingId || tornDown) return null;
-    const response = await callTool("get_job_terminal_continuation_state", {
-      wait_id: waitId,
-      binding_id: bindingId,
-    });
+    let response;
+    try {
+      response = await callTool("get_job_terminal_continuation_state", {
+        wait_id: waitId,
+        binding_id: bindingId,
+      });
+    } catch (_) {
+      // The transport can fail while the Server retains a perfectly valid
+      // binding. Retry the READ after reconnect; never rebind on a mere timeout.
+      throw Object.assign(new Error("Job Host bridge unavailable"), { transientHostTransport: true });
+    }
     const output = outputOf(response);
     const value = projectionOf(response);
     if (!toolCallSucceeded(response) || !output || !value || !sameWait(value)
       || !output.host_binding || output.host_binding.bound !== true) {
-      throw new Error("Job continuation state was not accepted");
+      const error = new Error("Job continuation state was not accepted");
+      // Only the Server's exact canonical binding-stale error can justify a
+      // bounded same-View rebind. Missing Waits, unauthorized windows, storage
+      // failures and malformed Host results are not proof of binding loss.
+      const failure = structuredOf(response);
+      if (failure?.success === false
+        && failure.output?.error_kind === "job_terminal_host_binding_stale") {
+        error.bindingMayBeLost = true;
+      }
+      throw error;
     }
     render(value);
     const preparedAttemptId = output.app_protocol && output.app_protocol.prepared_attempt_id;
@@ -428,7 +451,13 @@
     try {
       await bind();
       return !!bindingId;
-    } catch (_) {
+    } catch (error) {
+      if (error?.transientHostTransport === true) {
+        // A network failure after a *proven* binding loss must not permanently
+        // strand the durable Wait. Next poll retries bind() with the same fence.
+        // It must not re-prepare or re-dispatch any uncertain Host attempt.
+        return false;
+      }
       carrierLost = true;
       return false;
     }
@@ -453,7 +482,11 @@
               pendingFinish = null;
               return;
             }
-          } catch (_) {
+          } catch (error) {
+            // A transport outage while finishing an already-dispatched attempt
+            // cannot establish that the process binding was retired.
+            // Keep pendingFinish and its original one-shot outcome.
+            if (error?.bindingMayBeLost !== true) throw error;
             if (!await rebindAfterBindingLoss()) {
               throw new Error("Job continuation binding unavailable");
             }
@@ -468,10 +501,13 @@
       let current;
       try {
         current = await state();
-      } catch (_) {
-        // Process bindings disappear on Server restart. One bounded rebind attempt
-        // lets a surviving View recover a pending wait; a stale same-process View
-        // is rejected by the Server's retired binding fence and stops polling.
+      } catch (error) {
+        // A transient Host/WebSocket outage is not a revoked binding.
+        // Rebind only on an explicit business failure; otherwise preserve the
+        // exact binding and retry the read after the next bounded poll.
+        if (error?.bindingMayBeLost !== true) throw error;
+        // Process bindings disappear on Server restart. One bounded rebind
+        // retains the same View fence and must be verified by Server state.
         if (!await rebindAfterBindingLoss()) {
           throw new Error("Job continuation binding unavailable");
         }
