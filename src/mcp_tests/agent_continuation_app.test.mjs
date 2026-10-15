@@ -643,7 +643,7 @@ test("reopened expired card probes replacement, binds the successor, and dispatc
 
 test("expired successor recovery advances exact one-hop selectors until a live successor", async () => {
   const view = await boundView();
-  await view.reject(view.calls("get_agent_continuation_state")[0]);
+  await view.reply(view.calls("get_agent_continuation_state")[0], { isError: true, structuredContent: { success: false, output: { error_kind: "endpoint_expired" } } });
   let predecessor = projection;
   for (let hop = 0; hop < 2; hop++) {
     const recovery = view.calls("recover_agent_continuation_endpoint")[hop];
@@ -678,7 +678,7 @@ test("expired successor recovery advances exact one-hop selectors until a live s
 
 test("expired successor recovery stops after eight exact one-hop transitions", async () => {
   const view = await boundView();
-  await view.reject(view.calls("get_agent_continuation_state")[0]);
+  await view.reply(view.calls("get_agent_continuation_state")[0], { isError: true, structuredContent: { success: false, output: { error_kind: "endpoint_expired" } } });
   let predecessor = projection;
   for (let hop = 0; hop < 8; hop++) {
     const recovery = view.calls("recover_agent_continuation_endpoint")[hop];
@@ -697,7 +697,7 @@ test("expired successor recovery stops after eight exact one-hop transitions", a
 
 test("expiry replacement retries a lost response with the same selector and accepts one successor", async () => {
   const view = await boundView();
-  await view.reject(view.calls("get_agent_continuation_state")[0]);
+  await view.reply(view.calls("get_agent_continuation_state")[0], { isError: true, structuredContent: { success: false, output: { error_kind: "endpoint_expired" } } });
   const first = view.calls("recover_agent_continuation_endpoint")[0];
   await view.fireTimers(10000);
   const retry = view.calls("recover_agent_continuation_endpoint")[1];
@@ -716,7 +716,7 @@ test("expiry replacement retries a lost response with the same selector and acce
 for (const invalid of ["old Endpoint", "old generation", "new generation", "projection mismatch"]) {
   test(`expiry replacement rejects ${invalid} without retargeting or dispatch`, async () => {
     const view = await boundView();
-    await view.reject(view.calls("get_agent_continuation_state")[0]);
+    await view.reply(view.calls("get_agent_continuation_state")[0], { isError: true, structuredContent: { success: false, output: { error_kind: "endpoint_expired" } } });
     const output = replacementOutput();
     const replacement = output.endpoint_recovery.replacement;
     if (invalid === "old Endpoint") replacement.from_endpoint_id = replacement.endpoint_id;
@@ -738,7 +738,7 @@ for (const invalid of ["old Endpoint", "old generation", "new generation", "proj
 
 test("healthy heartbeat permits a later expiry probe on the same long-lived card", async () => {
   const view = await boundView();
-  await view.reject(view.calls("get_agent_continuation_state")[0]);
+  await view.reply(view.calls("get_agent_continuation_state")[0], { isError: true, structuredContent: { success: false, output: { error_kind: "endpoint_expired" } } });
   await view.reply(view.calls("recover_agent_continuation_endpoint")[0], toolResult({
     agent_continuation: projection,
     endpoint_recovery: { kind: "controller_live", replacement: null, successor_needs_recovery: false },
@@ -749,7 +749,7 @@ test("healthy heartbeat permits a later expiry probe on the same long-lived card
     agent_continuation: { ...projection, wake: null },
   }));
   await view.fireTimers(3000);
-  await view.reject(view.calls("get_agent_continuation_state").at(-1));
+  await view.reply(view.calls("get_agent_continuation_state").at(-1), { isError: true, structuredContent: { success: false, output: { error_kind: "endpoint_expired" } } });
   assert.equal(view.calls("recover_agent_continuation_endpoint").length, 2);
   await view.reply(view.calls("recover_agent_continuation_endpoint")[1], toolResult(replacementOutput()));
   assert.equal(view.calls("bind_agent_continuation").length, 2);
@@ -1150,6 +1150,30 @@ test("Host cancellation keeps bridge diagnostics out of the normal card", async 
   assert.ok(!view.nodes.status.textContent.includes(bindingId(view)));
 });
 
+test("transient Agent heartbeat outage does not invoke endpoint replacement or resend a Wake", async () => {
+  const view = await boundView();
+  await view.reject(view.calls("get_agent_continuation_state")[0], {
+    code: -32000, message: "private intermittent network error",
+  });
+  assert.equal(view.calls("recover_agent_continuation_endpoint").length, 0,
+    "bridge failure is not proof the Agent Endpoint expired");
+  assert.equal(view.calls("bind_agent_continuation").length, 1);
+  assert.equal(view.nodes.binding.textContent, "Reconnecting");
+  await view.fireTimers(3000);
+  const read = view.calls("get_agent_continuation_state")[1];
+  assert.ok(read, "retain original Agent identity and poll after transport recovery");
+  await view.reply(read, toolResult({ agent_continuation: projection }));
+  const acquisition = view.calls("acquire_agent_continuation_wake")[0];
+  assert.ok(acquisition, "resumed read can process the exact queued Wake");
+  await view.reply(acquisition, toolResult({ wake }));
+  await view.reply(view.calls("prepare_agent_continuation_wake")[0], prepared());
+  assert.equal(hostMessages(view).length, 1);
+  await view.reply(hostMessages(view)[0], {});
+  await view.reply(view.calls("finish_agent_continuation_wake")[0], toolResult({}));
+  assert.equal(view.calls("recover_agent_continuation_endpoint").length, 0);
+  assert.equal(hostMessages(view).length, 1);
+});
+
 test("published outputSchema projection preserves restart recovery and triggers exactly one rebind", async () => {
   const view = await boundView();
   const originalBinding = bindingId(view);
@@ -1304,7 +1328,8 @@ test("heartbeat Host rejection keeps durable state authoritative with exact App 
   assertAppCallId(state);
   const privateMessage = `PRIVATE_HEARTBEAT_ERROR_${input.endpoint_id}`;
   await view.reject(state, { code: -32042, message: privateMessage });
-  assert.equal(view.nodes.status.textContent, "Reconnecting…");
+  assert.equal(view.nodes.status.textContent, "Connection interrupted · retrying…");
+  assert.equal(view.calls("recover_agent_continuation_endpoint").length, 0);
   assert.ok(!view.nodes.status.textContent.includes(appCallId(state)));
   assert.ok(!view.nodes.status.textContent.includes(privateMessage));
   assert.ok(!view.nodes.status.textContent.includes(input.endpoint_id));
@@ -1341,33 +1366,31 @@ for (const loss of ["timeout", "Host error", "malformed result"]) {
   });
 }
 
-test("bind response-loss retries are bounded even with repeated bootstrap notifications", async () => {
+test("three Agent bind response losses back off and recover the exact View fence after network returns", async () => {
   const view = app("mcp_agent_continuation_app.html");
   await view.initialize();
   view.toolInput(input);
+  const original = view.calls("bind_agent_continuation")[0];
   for (let round = 0; round < 3; round++) {
     assert.equal(view.calls("bind_agent_continuation").length, round + 1);
     await view.fireTimers(10000);
-    await view.fireTimers(3000);
+    if (round === 2) {
+      assert.ok([...view.timers.values()].some(timer => timer.delay === 15000),
+        "repeated transport failures must back off instead of retiring Endpoint");
+    }
+    await view.fireTimers(round === 2 ? 15000 : 3000);
   }
   view.toolInput(input);
   view.toolResult({ agent_continuation: projection });
-  await view.fireTimers(3000);
-  assert.equal(view.calls("bind_agent_continuation").length, 3);
-  const recovery = view.calls("recover_agent_continuation_endpoint")[0];
-  assert.ok(recovery, "bounded bind loss may perform one authoritative expiry probe");
-  assertAppCallId(recovery);
-  assert.deepEqual(businessArgs(recovery), { ...input, binding_id: bindingId(view) });
-  assert.equal(view.calls("recover_agent_continuation_endpoint").length, 1);
-  await view.reply(recovery, toolResult({
-    agent_continuation: projection,
-    endpoint_recovery: { kind: "controller_live", replacement: null, successor_needs_recovery: false },
-    replayed: false,
-    state_changed: false,
-  }));
-  assert.equal(view.nodes.binding.textContent, "Unavailable");
-  assert.equal(view.nodes.status.textContent, "Connection unavailable. Queued work is preserved.");
-  assert.equal(view.timers.size, 0);
+  const latest = view.calls("bind_agent_continuation")[3];
+  assert.ok(latest, "bind can finish when the network recovers");
+  assert.deepEqual(businessArgs(latest), businessArgs(original), "same View fence throughout outage");
+  assert.equal(view.calls("recover_agent_continuation_endpoint").length, 0);
+  await view.reply(latest, toolResult({ agent_continuation: projection }));
+  assert.equal(view.nodes.binding.textContent, "Connected");
+  assert.equal(view.calls("get_agent_continuation_state").length, 1);
+  await view.reply(original, toolResult({ agent_continuation: projection }));
+  assert.equal(view.calls("get_agent_continuation_state").length, 1, "late Host result stays inert");
   await view.teardown();
   assert.equal(view.calls("unbind_agent_continuation")[0].params.arguments.binding_id, bindingId(view));
 });
