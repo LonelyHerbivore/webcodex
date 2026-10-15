@@ -116,19 +116,23 @@ declare its carrier permanently lost, and stop polling after the network had
 recovered.
 
 - **Job state read:** An RPC timeout/error preserves the existing Wait/Host
-  binding and schedules another read. A canonical negative Server result may
-  initiate the existing bounded rebind using the *same* View binding ID.
-  Network loss during that rebind retains the durable Wait and retries its
-  binding read after reconnection rather than setting `carrierLost`.
+  binding and schedules another read. Only the authoritative Server error
+  `job_terminal_host_binding_stale` may initiate the existing bounded rebind
+  using the *same* View binding ID. Missing Wait, unavailable ClientWindow,
+  storage failure and arbitrary negative/malformed Host responses cannot
+  authorize rebind. Network loss during an authorized rebind retains the durable
+  Wait and retries binding after reconnection rather than setting `carrierLost`.
 - **Job completion ACK:** A failed `finish_job_terminal_continuation`
   retains exactly the old prepared Attempt ID and outcome. If the subsequent
   state read also loses transport, the View preserves that Finish and does not
   resend `ui/message`. An explicit Server binding failure still follows
   the bounded recovery path.
-- **Agent heartbeat:** A transient bridge timeout/error is **not** an
-  `endpoint_expired` signal and cannot rotate the Agent's Endpoint or
-  controller generation. The original bound Agent remains eligible for a
-  verified read after reconnection.
+- **Agent heartbeat:** A transient bridge timeout/error or non-expiry business
+  failure is **not** an `endpoint_expired` signal and cannot invoke Endpoint
+  successor recovery or rotate the Agent's Endpoint/controller generation.
+  Only a canonical, authoritative `endpoint_expired` permits the bounded
+  successor recovery path. The original bound Agent remains eligible for a
+  verified read after an unrelated failure or reconnection.
 - **Agent initial bind:** Repeated Host transport failures preserve the
   original View fence; after three failures retry polling slows to 15 seconds
   rather than exhausting all recovery attempts and dropping pending work.
