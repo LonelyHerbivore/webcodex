@@ -833,6 +833,18 @@ h1 { margin: 0; font-size: 15px; font-weight: 650; overflow-wrap: anywhere; }
         }
         return;
       }
+      if (prepareUncertain === wake.attempt_id) {
+        // Only a fresh, authoritative Server read AND acquisition confirming
+        // the very same Wake/Attempt is still claimed and unprepared can clear
+        // a locally uncertain prepare. A stale pending projection, different
+        // Wake or crossed prepare fence must never authorize another request.
+        if (projection.wake?.wake_id !== wake.wake_id
+          || projection.wake.state !== "claimed"
+          || projection.dispatch_observation !== null
+          || wake.state !== "claimed"
+          || wake.dispatch_observation !== null) return;
+        prepareUncertain = null;
+      }
       await dispatchWake(wake);
     } catch (error) {
       if (!tornDown && error && error.recoverableBindingLoss === true && recoveryRebinds < MAX_RECOVERY_REBINDS) {

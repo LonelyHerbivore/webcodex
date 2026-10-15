@@ -1422,6 +1422,50 @@ for (const invalid of [
   });
 }
 
+test("Agent prepare response loss can recover the same authoritatively unprepared attempt", async () => {
+  const view = await boundView();
+  const claimedProjection = {
+    ...projection, wake: { ...wake, state: "claimed" }, dispatch_observation: null,
+  };
+  await view.reply(view.calls("get_agent_continuation_state")[0], toolResult({ agent_continuation: claimedProjection }));
+  await view.reply(view.calls("acquire_agent_continuation_wake")[0], toolResult({ wake }));
+  const original = view.calls("prepare_agent_continuation_wake")[0];
+  await view.reject(original, { code: -32000, message: "transient network loss" });
+  // The immediate post-error authoritative read also fails while offline.
+  await view.reject(view.calls("get_agent_continuation_state")[1], { code: -32000 });
+  assert.equal(hostMessages(view).length, 0);
+  assert.equal(view.calls("prepare_agent_continuation_wake").length, 1);
+  await view.fireTimers(3000);
+  const recoveredRead = view.calls("get_agent_continuation_state")[2];
+  await view.reply(recoveredRead, toolResult({ agent_continuation: claimedProjection }));
+  const reacquire = view.calls("acquire_agent_continuation_wake")[1];
+  assert.ok(reacquire);
+  await view.reply(reacquire, toolResult({ wake }));
+  const safelyRetried = view.calls("prepare_agent_continuation_wake")[1];
+  assert.ok(safelyRetried, "confirmed same unprepared Attempt should not get permanently stuck");
+  assert.deepEqual(businessArgs(safelyRetried), businessArgs(original));
+  await view.reply(safelyRetried, prepared());
+  assert.equal(hostMessages(view).length, 1, "one Host message only");
+  await view.reply(hostMessages(view)[0], {});
+  await view.reply(view.calls("finish_agent_continuation_wake")[0], toolResult({}));
+  assert.equal(hostMessages(view).length, 1);
+});
+
+test("Agent ambiguous prepare is never retried if authoritative read still reports pending", async () => {
+  const view = await boundView();
+  await view.reply(view.calls("get_agent_continuation_state")[0], toolResult({ agent_continuation: projection }));
+  await view.reply(view.calls("acquire_agent_continuation_wake")[0], toolResult({ wake }));
+  await view.reject(view.calls("prepare_agent_continuation_wake")[0], { code: -32000 });
+  await view.reject(view.calls("get_agent_continuation_state")[1], { code: -32000 });
+  await view.fireTimers(3000);
+  await view.reply(view.calls("get_agent_continuation_state")[2],
+    toolResult({ agent_continuation: projection }));
+  await view.reply(view.calls("acquire_agent_continuation_wake")[1], toolResult({ wake }));
+  assert.equal(view.calls("prepare_agent_continuation_wake").length, 1,
+    "a pending heartbeat is not proof that old prepare did not reach the server");
+  assert.equal(hostMessages(view).length, 0);
+});
+
 for (const loss of ["timeout", "missing", "wrong type", "blank", "oversized", "wrong Attempt", "business failure"]) {
   test(`prepare ${loss} reconciles delivery_unknown without a second prepare or Host turn`, async () => {
     const view = await boundView();
