@@ -225,7 +225,7 @@ test("finish response loss across Server restart rebinds only to observe recover
   assert.ok(secondFinish);
   await view.reject(secondFinish);
   const staleState = calls(view, "get_job_terminal_continuation_state").at(-1);
-  await view.reply(staleState, { structuredContent: { success: false, error: { code: "binding_not_found" } } });
+  await view.reply(staleState, { structuredContent: { success: false, output: { error_kind: "job_terminal_host_binding_stale", state_changed: false } } });
 
   const rebind = calls(view, "bind_job_terminal_continuation")[1];
   assert.ok(rebind);
@@ -316,11 +316,24 @@ test("teardown after prepare never creates a second Host dispatch", async () => 
   assert.equal(hostMessages(view).length, 1);
 });
 
+test("Job non-binding business failures preserve the original View and do not rebind", async () => {
+  for (const errorKind of ["job_terminal_wait_not_found", "job_terminal_client_window_unavailable", "job_terminal_attention_unavailable"]) {
+    const view = await initializedView();
+    await view.reply(calls(view, "bind_job_terminal_continuation")[0], bindResult(waiting));
+    await view.reply(calls(view, "get_job_terminal_continuation_state")[0], {
+      structuredContent: { success: false, output: { error_kind: errorKind, state_changed: false } },
+    });
+    assert.equal(calls(view, "bind_job_terminal_continuation").length, 1,
+      `${errorKind} is not proof of process-local binding loss`);
+    assert.equal(hostMessages(view).length, 0);
+  }
+});
+
 test("process binding loss performs a bounded rebind and may recover pending delivery", async () => {
   const view = await initializedView();
   await view.reply(calls(view, "bind_job_terminal_continuation")[0], bindResult(waiting));
   const firstState = calls(view, "get_job_terminal_continuation_state")[0];
-  await view.reply(firstState, { structuredContent: { success: false, error: { code: "binding_not_found" } } });
+  await view.reply(firstState, { structuredContent: { success: false, output: { error_kind: "job_terminal_host_binding_stale", state_changed: false } } });
   assert.equal(calls(view, "bind_job_terminal_continuation").length, 2);
   assert.equal(
     calls(view, "bind_job_terminal_continuation")[1].params.arguments.binding_id,
@@ -357,7 +370,7 @@ test("transient network loss during a proven Job rebind does not permanently los
   const view = await initializedView();
   await view.reply(calls(view, "bind_job_terminal_continuation")[0], bindResult(waiting));
   await view.reply(calls(view, "get_job_terminal_continuation_state")[0],
-    { structuredContent: { success: false, error: { code: "binding_not_found" } } });
+    { structuredContent: { success: false, output: { error_kind: "job_terminal_host_binding_stale", state_changed: false } } });
   assert.equal(calls(view, "bind_job_terminal_continuation").length, 2);
   await view.reject(calls(view, "bind_job_terminal_continuation")[1]);
   assert.ok(view.timers.size > 0, "failed transport may not stop durable Wait observation");

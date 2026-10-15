@@ -327,10 +327,14 @@
     if (!toolCallSucceeded(response) || !output || !value || !sameWait(value)
       || !output.host_binding || output.host_binding.bound !== true) {
       const error = new Error("Job continuation state was not accepted");
-      // Only an explicit business failure may justify one bounded rebind.
-      // Malformed success/metadata could be a Host projection bug and never
-      // proves the original View binding is lost.
-      if (structuredOf(response)?.success === false) error.bindingMayBeLost = true;
+      // Only the Server's exact canonical binding-stale error can justify a
+      // bounded same-View rebind. Missing Waits, unauthorized windows, storage
+      // failures and malformed Host results are not proof of binding loss.
+      const failure = structuredOf(response);
+      if (failure?.success === false
+        && failure.output?.error_kind === "job_terminal_host_binding_stale") {
+        error.bindingMayBeLost = true;
+      }
       throw error;
     }
     render(value);

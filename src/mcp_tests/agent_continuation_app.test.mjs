@@ -1322,6 +1322,19 @@ for (const failure of [
   });
 }
 
+test("non-expiry Agent heartbeat business failures cannot request Endpoint replacement", async () => {
+  for (const errorKind of ["host_binding_stale", "communication_store_unavailable", "endpoint_detached"]) {
+    const view = await boundView();
+    await view.reply(view.calls("get_agent_continuation_state")[0], {
+      structuredContent: { success: false, output: { error_kind: errorKind, state_changed: false } },
+    });
+    assert.equal(view.calls("recover_agent_continuation_endpoint").length, 0,
+      `${errorKind} is not proof of endpoint_expired`);
+    assert.equal(view.calls("bind_agent_continuation").length, 1);
+    assert.equal(hostMessages(view).length, 0);
+  }
+});
+
 test("heartbeat Host rejection keeps durable state authoritative with exact App call correlation", async () => {
   const view = await boundView();
   const state = view.calls("get_agent_continuation_state")[0];
