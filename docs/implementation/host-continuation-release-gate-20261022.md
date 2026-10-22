@@ -53,6 +53,16 @@ For each case, retain only redacted independent UTC evidence: original final, tr
 - A keyed replay of the exact Wait returned `state=triggered`, `delivery_state=delivered`, `replayed=true`, `state_changed=false`, `automatic_resume_available=false`; the Window ActionAudit separately observed `present_job_terminal_continuation` then a later `observe_jobs` request for the same Job.
 - This is a **positive real production Host app-triggered continuation and exact Job observation**, stronger than an ACK-only claim. The Host has not provided an independently attested `fresh_turn_started` model Turn ID or trustworthy visibility/zero-user-action audit. The PR #6 acceptance ledger's six `not_run` entries remain unchanged. This cannot establish background/closed-tab autonomous scheduling or justify production promotion.
 - The isolated Windows Git Bash environment has no `cargo` or `rustc` on PATH and no PR #6 test Host binary in its checkout. The authorized chat connection is still attached to the original production Host. A separate candidate registration/build is required before testing PR #6's exact implementation.
+
+## Exact PR #6 Windows binary build attempt (2026-10-22)
+
+- Windows and WSL2 Ubuntu have no usable local Rust toolchain on PATH, and the PR #6 CI artifacts contained no deployable Windows Server binary.
+- Created GitHub-only isolated branch `diagnostic/host-candidate-binary-20261022` from exact PR #6 head `c2d19dc9af63e966af5509a17ebb0b568cb1731d`. No modifications were made to PR #6, its Draft flag, its parent PR, or the production WebCodex environment.
+- The fork's registered `Host continuation diagnostic acceptance` workflow (ID 383906171) was extended **only on that independent branch**, with a Windows build job guarded by `github.event_name == 'workflow_dispatch'`. Build checks out the immutable PR #6 SHA, compiles `--profile dogfood -p webcodex --bin webcodex-server`, checks `--version` against the exact source identity and uploads a 3-day test artifact. Other build steps continue to run their existing smoke checks.
+- [Manual isolated binary build #39718838414](https://github.com/LonelyHerbivore/webcodex/actions/runs/39718838414) was accepted and started. Final build/artifact status must be read from GitHub; **at this documentation checkpoint the Windows build step was still running**, so it has not been called successful or deployed.
+- Prepared a fail-closed D-drive-only smoke harness `scripts/isolated_pr6_windows_host_smoke.mjs`, syntax-checked. Only after obtaining an independently verified exact candidate binary should it create fresh isolated data, generate a one-use in-memory bootstrap token, bind to loopback, verify `/healthz`, confirm anonymous MCP is rejected, then stop on standard-input EOF. No real Runner enrollment, Host credential transfer, or browser simulation is authorized.
+- An authorized ChatGPT MCP connection to the isolated candidate still must be configured separately before genuine fresh-model-turn cases; green binary/startup smoke is not real ChatGPT Host acceptance. The six candidate case statuses remain `not_run`.
+
 ## Current status
 
 - GitHub CI and diagnostic CI: **PASS** at exact PR #6 SHA.

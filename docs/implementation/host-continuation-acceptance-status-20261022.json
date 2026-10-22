@@ -5,6 +5,14 @@
   "pull_request": 6,
   "candidate_commit": "c2d19dc9af63e966af5509a17ebb0b568cb1731d",
   "candidate_deployed_to_isolated_host": false,
+  "candidate_windows_build": {
+    "workflow_run_id":39718838414,
+    "branch":"diagnostic/host-candidate-binary-20261022",
+    "source_commit":"c2d19dc9af63e966af5509a17ebb0b568cb1731d",
+    "build_job_status":"in_progress",
+    "binary_verified":false,
+    "loopback_smoke_status":"not_run"
+  },
   "github_ci": [
     {"run_id":39713539023,"name":"CI","conclusion":"success"},
     {"run_id":39713484909,"name":"Host continuation diagnostic acceptance","conclusion":"success"}
