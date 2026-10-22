@@ -44,6 +44,15 @@ For each case, retain only redacted independent UTC evidence: original final, tr
 6. Optional supplementary cases: closed tab/reopen, browser freeze, physical WAN interruption/restoration, server restart, and page replacement. Distinguish *recovery on reopen* from *turn started while tab was closed*.
 7. Only after genuine Host attestation and safety review should the isolated deployment be considered for promotion. Never merge stacked Draft PR #6 and #4 directly into production without reviewing parent ordering and release scope.
 
+
+## Observed production Host Job continuation (2026-10-22; **not** PR #6 acceptance)
+
+- Host build actually used: `0.5.0-rc.2 / 683256d7`; no isolated PR #6 binary or MCP connection was active. Browser visibility was **not independently observed**, so this cannot be classified as `job.short.foreground` in the candidate's official six-case matrix.
+- Began one harmless 45-second delayed Node Job (`wc_job_f2LEmtCq0p7XaAwY`), and registered one exact durable Wait (`wc_job_wait_W2hjfeYW2kFhcAjT`) with a stable idempotency key before the original assistant response finalized.
+- `present_job_terminal_continuation` returned `waiting/not_ready`. After the original assistant final, the real ChatGPT Host produced a `ui://webcodex/job-terminal-continuation/v2` continuation with the same exact Job ID. This was followed by the assistant's automatic continued turn, whose actual model tool call `observe_jobs` independently returned `completed`, `exit_code=0`, with output marker `PR6_HOST_CONTINUATION_BASELINE_JOB_OK`. No Job was restarted.
+- A keyed replay of the exact Wait returned `state=triggered`, `delivery_state=delivered`, `replayed=true`, `state_changed=false`, `automatic_resume_available=false`; the Window ActionAudit separately observed `present_job_terminal_continuation` then a later `observe_jobs` request for the same Job.
+- This is a **positive real production Host app-triggered continuation and exact Job observation**, stronger than an ACK-only claim. The Host has not provided an independently attested `fresh_turn_started` model Turn ID or trustworthy visibility/zero-user-action audit. The PR #6 acceptance ledger's six `not_run` entries remain unchanged. This cannot establish background/closed-tab autonomous scheduling or justify production promotion.
+- The isolated Windows Git Bash environment has no `cargo` or `rustc` on PATH and no PR #6 test Host binary in its checkout. The authorized chat connection is still attached to the original production Host. A separate candidate registration/build is required before testing PR #6's exact implementation.
 ## Current status
 
 - GitHub CI and diagnostic CI: **PASS** at exact PR #6 SHA.
