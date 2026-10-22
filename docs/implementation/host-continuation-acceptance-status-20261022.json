@@ -1,0 +1,25 @@
+{
+  "schema": "webcodex.host-continuation-acceptance.v1",
+  "checked_on": "2026-10-22",
+  "repository": "LonelyHerbivore/webcodex",
+  "pull_request": 6,
+  "candidate_commit": "c2d19dc9af63e966af5509a17ebb0b568cb1731d",
+  "candidate_deployed_to_isolated_host": false,
+  "github_ci": [
+    {"run_id":39713539023,"name":"CI","conclusion":"success"},
+    {"run_id":39713484909,"name":"Host continuation diagnostic acceptance","conclusion":"success"}
+  ],
+  "readiness": {"production_auto_resume_available":false,"independent_host_turn_evidence":false,"release_ready":false},
+  "real_host_cases": [
+    {"id":"agent.short.foreground","status":"not_run"},
+    {"id":"agent.long.foreground","status":"not_run"},
+    {"id":"agent.long.background","status":"not_run"},
+    {"id":"job.short.foreground","status":"not_run"},
+    {"id":"job.long.foreground","status":"not_run"},
+    {"id":"job.long.background","status":"not_run"}
+  ],
+  "supplemental_cases": [
+    {"id":"closed_tab_reopen","status":"not_run"},
+    {"id":"physical_wan_outage","status":"not_run"}
+  ]
+}
