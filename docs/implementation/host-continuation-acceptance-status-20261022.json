@@ -9,9 +9,17 @@
     "workflow_run_id":39718838414,
     "branch":"diagnostic/host-candidate-binary-20261022",
     "source_commit":"c2d19dc9af63e966af5509a17ebb0b568cb1731d",
-    "build_job_status":"in_progress",
-    "binary_verified":false,
-    "loopback_smoke_status":"not_run"
+    "build_job_status":"success",
+    "artifact_id":12400203704,
+    "binary_verified":true,
+    "binary_sha256":"a2d9eda2370816738dee8cfd1d649eb8ec8b6148c5c2d7e1a0e694957385ff84",
+    "loopback_smoke_status":"passed",
+    "health_http_status":200,
+    "anonymous_mcp_http_status":401,
+    "authorized_mcp_http_status":200,
+    "presentation_tools":["present_agent_continuation","present_job_terminal_continuation"],
+    "isolated_host_exited_cleanly":true,
+    "chatgpt_connector_registered_to_candidate":false
   },
   "github_ci": [
     {"run_id":39713539023,"name":"CI","conclusion":"success"},

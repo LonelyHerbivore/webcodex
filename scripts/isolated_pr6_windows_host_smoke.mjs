@@ -31,14 +31,14 @@ const allocatePort=()=>new Promise((resolve,reject)=>{
   });
 });
 const port=await allocatePort();
-const dataDir=path.join(root,'runtime-data');
+const dataDir=path.join(root,'runtime-data-mcp');
 assert.ok(!fs.existsSync(dataDir),'Refuse to reuse existing data directory');
 fs.mkdirSync(dataDir,{recursive:true});
 const env={...process.env};
 for(const key of Object.keys(env)){
   if(key.startsWith('WEBCODEX_')||/^(OPENAI_|GITHUB_|GH_|ANTHROPIC_|CODEX_)/.test(key))delete env[key];
 }
-const scratch=path.join(root,'temp');
+const scratch=path.join(root,'temp-mcp');
 fs.mkdirSync(scratch,{recursive:true});
 Object.assign(env,{
   WEBCODEX_ADDR:'127.0.0.1:'+port,
@@ -58,7 +58,7 @@ child.stdout.on('data',x=>{stdout=(stdout+x.toString()).slice(-6000)});
 child.stderr.on('data',x=>{stderr=(stderr+x.toString()).slice(-6000)});
 const exited=new Promise(resolve=>child.once('exit',(code,signal)=>resolve({code,signal})));
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
-let healthStatus=null,unauthorizedStatus=null,stop=null;
+let healthStatus=null,unauthorizedStatus=null,authorizedMcpStatus=null,foundPresentationTools=[],stop=null;
 try{
   const deadline=Date.now()+30000;
   while(Date.now()<deadline){
@@ -78,6 +78,37 @@ try{
   });
   unauthorizedStatus=response.status;
   assert.ok([401,403].includes(unauthorizedStatus),'Unexpected anonymous MCP status '+unauthorizedStatus);
+  // The test token is in memory and never logged or persisted.
+  const headers={
+    'authorization':'Bearer '+env.WEBCODEX_TOKEN,
+    'content-type':'application/json',
+    'accept':'application/json, text/event-stream',
+    'mcp-protocol-version':'2025-11-25',
+  };
+  const initial=await fetch('http://127.0.0.1:'+port+'/mcp',{
+    method:'POST',headers,
+    body:JSON.stringify({jsonrpc:'2.0',id:2,method:'initialize',params:{}}),
+    signal:AbortSignal.timeout(5000),
+  });
+  assert.equal(initial.status,200,'Authorized MCP initialize failed');
+  const initialized=await initial.json();
+  assert.equal(initialized.result?.serverInfo?.name,'webcodex','Wrong MCP Server identity');
+  const session=initial.headers.get('mcp-session-id');
+  const listed=await fetch('http://127.0.0.1:'+port+'/mcp',{
+    method:'POST',
+    headers:{...headers,...(session?{'mcp-session-id':session}:{})},
+    body:JSON.stringify({jsonrpc:'2.0',id:3,method:'tools/list',params:{
+      _meta:{'io.modelcontextprotocol/protocolVersion':'2025-11-25'}
+    }}),
+    signal:AbortSignal.timeout(5000),
+  });
+  authorizedMcpStatus=listed.status;
+  assert.equal(authorizedMcpStatus,200,'Authorized MCP tools/list failed');
+  const listBody=await listed.json();
+  assert.ok(Array.isArray(listBody.result?.tools),'MCP tool descriptors unavailable');
+  const wanted=['present_agent_continuation','present_job_terminal_continuation'];
+  foundPresentationTools=wanted.filter(name=>listBody.result.tools.some(tool=>tool.name===name));
+  assert.deepEqual(foundPresentationTools,wanted,'Required continuation presentation descriptors absent');
 }finally{
   child.stdin.end();
   stop=await Promise.race([exited,sleep(10000).then(()=>({timeout:true}))]);
@@ -90,11 +121,13 @@ const summary={
   listen_scope:'127.0.0.1',
   health_status:healthStatus,
   anonymous_mcp_status:unauthorizedStatus,
+  authorized_mcp_status:authorizedMcpStatus,
+  presentation_tools:foundPresentationTools,
   server_exit:stop,
   host_turn_id_attested:false,
   pr6_six_case_acceptance:'not_run',
   tested_at:new Date().toISOString(),
 };
-fs.writeFileSync(path.join(root,'smoke-evidence.json'),JSON.stringify(summary,null,2));
+fs.writeFileSync(path.join(root,'smoke-evidence-mcp.json'),JSON.stringify(summary,null,2));
 console.log(JSON.stringify(summary,null,2));
 assert.equal(stop?.code,0,'Server must stop cleanly on stdin EOF');
