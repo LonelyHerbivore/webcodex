@@ -1,0 +1,64 @@
+name: Isolated PR6 Windows Host candidate
+run-name: PR6 host candidate c2d19dc9 (diagnostic only)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: isolated-pr6-host-build-20261022
+  cancel-in-progress: false
+jobs:
+  build-win-host:
+    runs-on: windows-latest
+    timeout-minutes: 75
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      CARGO_TERM_COLOR: always
+      WEBCODEX_GIT_COMMIT: c2d19dc9af63e966af5509a17ebb0b568cb1731d
+      WEBCODEX_GIT_DIRTY: 'false'
+    steps:
+      - name: Checkout exact approved PR 6 code, not diagnostic workflow commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: c2d19dc9af63e966af5509a17ebb0b568cb1731d
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Rust stable
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
+      - name: Rust build cache
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+        with:
+          shared-key: pr6-host-windows-candidate
+      - name: Build and verify isolated Host candidate
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $source = (git rev-parse HEAD).Trim()
+          if ($source -ne $env:WEBCODEX_GIT_COMMIT) { throw "Checkout SHA mismatch: $source" }
+          $builtAt = (git show -s --format=%ct HEAD).Trim()
+          $env:WEBCODEX_BUILT_AT = $builtAt
+          cargo build --locked --profile dogfood -p webcodex --bin webcodex-server
+          if ($LASTEXITCODE -ne 0) { throw 'Host compile failed' }
+          $exe = 'target/dogfood/webcodex-server.exe'
+          if (!(Test-Path $exe)) { throw 'Host binary missing' }
+          $ver = (& $exe --version | Out-String).Trim()
+          if ($LASTEXITCODE -ne 0) { throw 'Host version probe failed' }
+          $packageVersion = (node -p "require('./npm/webcodex/package.json').version").Trim()
+          $expected = "webcodex-server $packageVersion (commit $source, dirty=false, built_at=$builtAt)"
+          if ($ver -ne $expected) { throw "Host identity mismatch: $ver" }
+          New-Item -Path candidate -ItemType Directory | Out-Null
+          Copy-Item $exe candidate/webcodex-server.exe
+          $hash = (Get-FileHash candidate/webcodex-server.exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  webcodex-server.exe" | Set-Content candidate/SHA256SUMS.txt
+          "source_commit=$source" | Set-Content candidate/BUILD_ID.txt
+          "built_at=$builtAt" | Add-Content candidate/BUILD_ID.txt
+          "version=$ver" | Add-Content candidate/BUILD_ID.txt
+          Write-Output "Verified exact candidate identity: $ver"
+      - name: Upload binary for isolated local testing only
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pr6-windows-host-c2d19dc9
+          path: candidate/
+          if-no-files-found: error
+          retention-days: 3
