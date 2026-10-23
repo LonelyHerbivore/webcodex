@@ -50,7 +50,15 @@
     "observed_server_pid":13236,
     "same_runner_instance":true,
     "test_tunnel_credentials_present_on_candidate":false,
-    "routed_to_pr6_candidate":false
+    "routed_to_pr6_candidate":false,
+    "separate_tunnel_id_confirmed":true,
+    "production_tunnel_owner_pid":4844,
+    "test_tunnel_owner_pid":12648,
+    "two_profiles_share_desktop_production_env":true,
+    "test_autostart_enabled":true,
+    "safe_handoff_script":"scripts/pr6_isolated_test_tunnel.mjs",
+    "safe_handoff_preflight_passed":true,
+    "safe_handoff_ready_to_start":false
   },
   "readiness": {"production_auto_resume_available":false,"independent_host_turn_evidence":false,"release_ready":false},
   "production_baseline": {
