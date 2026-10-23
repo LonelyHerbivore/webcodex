@@ -5,6 +5,22 @@
   "pull_request": 6,
   "candidate_commit": "c2d19dc9af63e966af5509a17ebb0b568cb1731d",
   "candidate_deployed_to_isolated_host": false,
+  "isolated_runtime_trio": {
+    "workflow_run_id":39909520529,
+    "artifact_id":12481869213,
+    "exact_source_commit":"c2d19dc9af63e966af5509a17ebb0b568cb1731d",
+    "exe_names":["webcodex.exe","webcodex-server.exe","webcodex-runner.exe"],
+    "three_checksums_verified":true,
+    "loopback_addr":"127.0.0.1:18086",
+    "isolated_host_auth_passed":true,
+    "one_registered_runner_seen_online":true,
+    "registered_test_projects":1,
+    "workers_launched":0,
+    "runner_clean_exit":true,
+    "server_clean_exit":true,
+    "tunnel_identity_provisioned":false,
+    "candidate_chatgpt_connection_established":false
+  },
   "candidate_windows_build": {
     "workflow_run_id":39718838414,
     "branch":"diagnostic/host-candidate-binary-20261022",
