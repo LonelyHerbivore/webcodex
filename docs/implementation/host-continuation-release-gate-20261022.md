@@ -120,6 +120,13 @@ For each case, retain only redacted independent UTC evidence: original final, tr
 - Normal invocation: \`node scripts/check_pr6_release_gate.mjs\`. A valid blocked-status ledger exits **0** with \`releaseAuthorized=false\`; mismatched gate exits **1**; unreadable or malformed input exits **2**. The script intentionally has **no authority to approve any release**.
 - Ran through WebCodex's registered **FastCtx** (production-side MCP gateway), targeting only this isolated diagnostic checkout. Existing Agent Wake/Job Terminal/evidence \`node --test\` suites passed **241/241**; new guard tests passed **6/6**. The independent six real Host turn cases remain **0/6**, PR #6 Draft unchanged. This is regression infrastructure progress, not a workaround for the blocked \`run_job\` invocation.
 
+## Background auto-resume limitation proven by App contract (FastCtx audit)
+
+- **Job terminal MCP App:** \`src/mcp_job_terminal_continuation_app.html\` checks \`document.hidden\` before \`prepare_job_terminal_continuation\`, and, if the tab becomes hidden during prepare, finishes \`delivery_unknown\` without sending \`ui/message\`. The existing \`hidden tab keeps completed Job pending; foreground re-entry dispatches exactly once\` and \`switching to hidden during prepare\` unit tests encode that behavior.
+- **Agent Wake MCP App:** \`src/mcp_agent_continuation_app.html\` likewise blocks hidden-tab \`ui/message\`, with regression coverage for background deferral and hidden-during-prepare uncertainty. Both are deliberate duplicate-prevention contracts, not accidental timer failures.
+- Therefore **the App-only visible-tab carrier cannot deliver a fresh ChatGPT model turn while the tab remains hidden** in either published \`*.long.background\` acceptance case. Green offline App tests prove suppression, not background autonomy. Background acceptance requires a separately available, explicitly authorized **Host-native unattended scheduler/carrier** with its own independently attested model turn and exactly-once intent. Never simulate success with a shell watcher, forged user action or looping \`ui/message\`.
+- This is an additional **architectural release blocker**, distinct from the earlier ChatGPT safety refusal for \`run_job\`. No unattended Host-native carrier has been verified here. The PR #6 real matrix remains \`not_run\`; do not claim background success merely because the user returns to the foreground later.
+
 ## Current status
 
 - GitHub CI and diagnostic CI: **PASS** at exact PR #6 SHA.
