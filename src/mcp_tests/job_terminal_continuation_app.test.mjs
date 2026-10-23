@@ -183,6 +183,33 @@ test("finish response loss retries only the exact finish fence, never ui/message
   assert.equal(view.timers.size, 0);
 });
 
+test("temporary outage during uncertain Job finish preserves exact outcome without Host redispatch", async () => {
+  const view = await initializedView();
+  await view.reply(calls(view, "bind_job_terminal_continuation")[0], bindResult(pending));
+  await view.reply(calls(view, "get_job_terminal_continuation_state")[0], stateResult(pending));
+  await view.reply(calls(view, "prepare_job_terminal_continuation")[0], prepareResult());
+  await view.reply(hostMessages(view)[0], {});
+  const firstFinish = calls(view, "finish_job_terminal_continuation")[0];
+  await view.reject(firstFinish);
+  await view.fireTimers(3000);
+  const secondFinish = calls(view, "finish_job_terminal_continuation")[1];
+  assert.deepEqual(plain(secondFinish.params.arguments), plain(firstFinish.params.arguments));
+  await view.reject(secondFinish);
+  const read = calls(view, "get_job_terminal_continuation_state").at(-1);
+  assert.ok(read);
+  await view.reject(read, { code: -32000 });
+  assert.equal(calls(view, "bind_job_terminal_continuation").length, 1,
+    "Host bridge outage cannot retire binding or strand finish");
+  await view.fireTimers(3000);
+  const retry = calls(view, "finish_job_terminal_continuation")[2];
+  assert.ok(retry);
+  assert.deepEqual(plain(retry.params.arguments), plain(firstFinish.params.arguments));
+  await view.reply(retry, finishResult("delivered"));
+  assert.equal(hostMessages(view).length, 1);
+  assert.equal(calls(view, "prepare_job_terminal_continuation").length, 1);
+  assert.equal(view.timers.size, 0);
+});
+
 test("finish response loss across Server restart rebinds only to observe recovered unknown", async () => {
   const view = await initializedView();
   await view.reply(calls(view, "bind_job_terminal_continuation")[0], bindResult(pending));
@@ -198,7 +225,7 @@ test("finish response loss across Server restart rebinds only to observe recover
   assert.ok(secondFinish);
   await view.reject(secondFinish);
   const staleState = calls(view, "get_job_terminal_continuation_state").at(-1);
-  await view.reject(staleState);
+  await view.reply(staleState, { structuredContent: { success: false, output: { error_kind: "job_terminal_host_binding_stale", state_changed: false } } });
 
   const rebind = calls(view, "bind_job_terminal_continuation")[1];
   assert.ok(rebind);
@@ -289,11 +316,24 @@ test("teardown after prepare never creates a second Host dispatch", async () => 
   assert.equal(hostMessages(view).length, 1);
 });
 
+test("Job non-binding business failures preserve the original View and do not rebind", async () => {
+  for (const errorKind of ["job_terminal_wait_not_found", "job_terminal_client_window_unavailable", "job_terminal_attention_unavailable"]) {
+    const view = await initializedView();
+    await view.reply(calls(view, "bind_job_terminal_continuation")[0], bindResult(waiting));
+    await view.reply(calls(view, "get_job_terminal_continuation_state")[0], {
+      structuredContent: { success: false, output: { error_kind: errorKind, state_changed: false } },
+    });
+    assert.equal(calls(view, "bind_job_terminal_continuation").length, 1,
+      `${errorKind} is not proof of process-local binding loss`);
+    assert.equal(hostMessages(view).length, 0);
+  }
+});
+
 test("process binding loss performs a bounded rebind and may recover pending delivery", async () => {
   const view = await initializedView();
   await view.reply(calls(view, "bind_job_terminal_continuation")[0], bindResult(waiting));
   const firstState = calls(view, "get_job_terminal_continuation_state")[0];
-  await view.reject(firstState);
+  await view.reply(firstState, { structuredContent: { success: false, output: { error_kind: "job_terminal_host_binding_stale", state_changed: false } } });
   assert.equal(calls(view, "bind_job_terminal_continuation").length, 2);
   assert.equal(
     calls(view, "bind_job_terminal_continuation")[1].params.arguments.binding_id,
@@ -306,6 +346,43 @@ test("process binding loss performs a bounded rebind and may recover pending del
   assert.equal(calls(view, "prepare_job_terminal_continuation").length, 1);
 });
 
+test("transient Job state transport outage preserves binding and recovers one pending delivery", async () => {
+  const view = await initializedView();
+  await view.reply(calls(view, "bind_job_terminal_continuation")[0], bindResult(waiting));
+  await view.reject(calls(view, "get_job_terminal_continuation_state")[0]);
+  assert.equal(calls(view, "bind_job_terminal_continuation").length, 1,
+    "one transient Host bridge failure cannot retire an otherwise valid binding");
+  assert.ok(view.timers.size > 0, "keep polling after network loss");
+  await view.fireTimers(3000);
+  const resumed = calls(view, "get_job_terminal_continuation_state")[1];
+  assert.ok(resumed);
+  await view.reply(resumed, stateResult(pending));
+  assert.equal(calls(view, "prepare_job_terminal_continuation").length, 1);
+  await view.reply(calls(view, "prepare_job_terminal_continuation")[0], prepareResult());
+  assert.equal(hostMessages(view).length, 1);
+  await view.reply(hostMessages(view)[0], {});
+  await view.reply(calls(view, "finish_job_terminal_continuation")[0], finishResult("delivered"));
+  await view.visibility(true);
+  assert.equal(hostMessages(view).length, 1, "reconnect cannot send the same Host message twice");
+});
+
+test("transient network loss during a proven Job rebind does not permanently lose the carrier", async () => {
+  const view = await initializedView();
+  await view.reply(calls(view, "bind_job_terminal_continuation")[0], bindResult(waiting));
+  await view.reply(calls(view, "get_job_terminal_continuation_state")[0],
+    { structuredContent: { success: false, output: { error_kind: "job_terminal_host_binding_stale", state_changed: false } } });
+  assert.equal(calls(view, "bind_job_terminal_continuation").length, 2);
+  await view.reject(calls(view, "bind_job_terminal_continuation")[1]);
+  assert.ok(view.timers.size > 0, "failed transport may not stop durable Wait observation");
+  await view.fireTimers(3000);
+  const next = calls(view, "bind_job_terminal_continuation")[2];
+  assert.ok(next, "same exact binding fence can be retried after connectivity returns");
+  assert.equal(next.params.arguments.binding_id, bindingId(view));
+  await view.reply(next, bindResult(pending));
+  await view.reply(calls(view, "get_job_terminal_continuation_state").at(-1), stateResult(pending));
+  assert.equal(calls(view, "prepare_job_terminal_continuation").length, 1);
+  assert.equal(hostMessages(view).length, 0, "never infer a Host turn from reconnect alone");
+});
 test("expired projection stops terminal polling", async () => {
   const view = await initializedView();
   const expired = { ...pending, expires_at: 1 };
