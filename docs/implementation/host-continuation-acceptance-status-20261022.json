@@ -1,10 +1,10 @@
 {
   "schema": "webcodex.host-continuation-acceptance.v1",
-  "checked_on": "2026-10-22",
+  "checked_on": "2026-10-23",
   "repository": "LonelyHerbivore/webcodex",
   "pull_request": 6,
   "candidate_commit": "c2d19dc9af63e966af5509a17ebb0b568cb1731d",
-  "candidate_deployed_to_isolated_host": false,
+  "candidate_deployed_to_isolated_host": true,
   "isolated_runtime_trio": {
     "workflow_run_id":39909520529,
     "artifact_id":12481869213,
@@ -18,8 +18,13 @@
     "workers_launched":0,
     "runner_clean_exit":true,
     "server_clean_exit":true,
-    "tunnel_identity_provisioned":false,
-    "candidate_chatgpt_connection_established":false
+    "tunnel_identity_provisioned":true,
+    "candidate_chatgpt_connection_established":true,
+    "live_test_server_pid":7140,
+    "live_test_runner_client_id":"pr6-acceptance-20261023",
+    "test_tunnel_ready":true,
+    "test_local_mcp_ready":true,
+    "supervised_launcher_job_id":"wc_job_yh1vVWJ6ZrIUwFxf"
   },
   "candidate_windows_build": {
     "workflow_run_id":39718838414,
@@ -35,7 +40,7 @@
     "authorized_mcp_http_status":200,
     "presentation_tools":["present_agent_continuation","present_job_terminal_continuation"],
     "isolated_host_exited_cleanly":true,
-    "chatgpt_connector_registered_to_candidate":false
+    "chatgpt_connector_registered_to_candidate":true
   },
   "github_ci": [
     {"run_id":39713539023,"name":"CI","conclusion":"success"},
@@ -45,12 +50,17 @@
     "checked_on":"2026-10-23",
     "test_plugin_name":"WebCodex 测试",
     "production_plugin_name":"WebCodex 幻16",
-    "same_server_process":true,
-    "observed_server_commit":"683256d7cd93267f65cce301055cacf17667fd54",
-    "observed_server_pid":13236,
-    "same_runner_instance":true,
+    "same_server_process":false,
+    "observed_server_commit":"c2d19dc9af63e966af5509a17ebb0b568cb1731d",
+    "observed_server_pid":7140,
+    "same_runner_instance":false,
     "test_tunnel_credentials_present_on_candidate":false,
-    "routed_to_pr6_candidate":false,
+    "routed_to_pr6_candidate":true,
+    "observed_test_server_commit":"c2d19dc9af63e966af5509a17ebb0b568cb1731d",
+    "observed_test_server_pid":7140,
+    "observed_test_projects":1,
+    "observed_production_server_pid":13236,
+    "isolated_test_readme_read_via_connector":true,
     "separate_tunnel_id_confirmed":true,
     "production_tunnel_owner_pid":4844,
     "test_tunnel_owner_pid":12648,
@@ -58,12 +68,16 @@
     "test_autostart_enabled":false,
     "test_profile_enabled":false,
     "test_owner_process_absent":true,
-    "test_fence_active_marker_retained":true,
+    "previous_test_fence_archived":true,
+    "current_test_tunnel_has_new_run_fence":true,
+    "test_fence_exact_run_archived_with_approval":true,
+    "prior_tunnel_actions_replayed":false,
     "test_fence_lock_observed_free":true,
-    "exact_run_recovery_approval_required":true,
+    "exact_run_recovery_approval_required":false,
     "safe_handoff_script":"scripts/pr6_isolated_test_tunnel.mjs",
     "safe_handoff_preflight_passed":true,
-    "safe_handoff_ready_to_start":false
+    "safe_handoff_ready_at_launch":true,
+    "isolated_launcher_now_running":true
   },
   "readiness": {"production_auto_resume_available":false,"independent_host_turn_evidence":false,"release_ready":false},
   "production_baseline": {
@@ -78,6 +92,14 @@
     "independent_host_turn_id":false,
     "visibility_verified":false,
     "qualifies_as_pr6_host_acceptance":false
+  },
+  "first_candidate_job_probe": {
+    "case_id":"job.short.foreground",
+    "attempted":true,
+    "tool_gateway_blocked_by_platform_safety":true,
+    "job_created":false,
+    "model_fresh_turn_verified":false,
+    "count_as_case_run":false
   },
   "real_host_cases": [
     {"id":"agent.short.foreground","status":"not_run"},
