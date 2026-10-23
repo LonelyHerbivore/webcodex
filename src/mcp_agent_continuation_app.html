@@ -66,6 +66,9 @@ h1 { margin: 0; font-size: 15px; font-weight: 650; overflow-wrap: anywhere; }
   const RESTART_RECOVERY_KIND = "host_binding_missing_in_process";
   const MAX_AUTOMATIC_MESSAGE_CHARS = 1536;
   const VISIBLE_POLL_MS = 3000;
+  // The presentation result is not proof the invoking GPT turn has finalized.
+  // Keep a bounded yield window before sending a new Host ui/message.
+  const AUTO_RESUME_TURN_YIELD_GRACE_MS = 10000;
   const HIDDEN_HEARTBEAT_MS = 15000;
   const DISPATCH_STATES = new Set(["dispatch_prepared", "dispatch_accepted", "dispatch_unknown", "continuation_consumed"]);
   const WAIT_STATES = new Set(["waiting", "triggered", "resumed", "cancelled"]);
@@ -81,6 +84,8 @@ h1 { margin: 0; font-size: 15px; font-weight: 650; overflow-wrap: anywhere; }
   let timer = null;
   let coordinationInFlight = false;
   let hostInitialized = false;
+  let initialToolResultSeen = false;
+  let autoResumeNotBeforeMs = null;
   // Explicit Host capability absence blocks automatic text delivery before prepare.
   // Legacy Hosts with no capability declaration stay unknown for compatibility.
   let hostTextMessageSupported = null;
@@ -711,6 +716,7 @@ h1 { margin: 0; font-size: 15px; font-weight: 650; overflow-wrap: anywhere; }
   }
 
   async function dispatchWake(wake) {
+    if (autoResumeNotBeforeMs !== null && Date.now() < autoResumeNotBeforeMs) return;
     if (document.hidden || hostTextMessageSupported === false
         || dispatchStarted === wake.attempt_id || prepareUncertain === wake.attempt_id) return;
     let automaticMessage;
@@ -830,6 +836,7 @@ h1 { margin: 0; font-size: 15px; font-weight: 650; overflow-wrap: anywhere; }
       // Host transport acceptance from a hidden iframe is not proof that a
       // fresh model turn started. Do not acquire or prepare while hidden.
       if (document.hidden || hostTextMessageSupported === false) return;
+      if (autoResumeNotBeforeMs !== null && Date.now() < autoResumeNotBeforeMs) return;
       const wake = await acquire();
       if (!wake || tornDown) return;
       if (wake.dispatch_observation === "dispatch_accepted" || wake.dispatch_observation === "dispatch_unknown") return;
@@ -922,6 +929,10 @@ h1 { margin: 0; font-size: 15px; font-weight: 650; overflow-wrap: anywhere; }
     const output = outputOf(result);
     if (output && Object.prototype.hasOwnProperty.call(output, "agent_wait")
       && !acceptWaitReference(output.agent_wait)) return;
+    if (!initialToolResultSeen) {
+      initialToolResultSeen = true;
+      autoResumeNotBeforeMs = Date.now() + AUTO_RESUME_TURN_YIELD_GRACE_MS;
+    }
     // A delayed initial result must not overwrite newer bind/heartbeat state.
     if (!bindingStarted && bindAttempts === 0) renderWithWait(projection);
     void maybeStartBinding();
