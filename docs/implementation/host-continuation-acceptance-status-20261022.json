@@ -6,122 +6,179 @@
   "candidate_commit": "c2d19dc9af63e966af5509a17ebb0b568cb1731d",
   "candidate_deployed_to_isolated_host": true,
   "isolated_runtime_trio": {
-    "workflow_run_id":39909520529,
-    "artifact_id":12481869213,
-    "exact_source_commit":"c2d19dc9af63e966af5509a17ebb0b568cb1731d",
-    "exe_names":["webcodex.exe","webcodex-server.exe","webcodex-runner.exe"],
-    "three_checksums_verified":true,
-    "loopback_addr":"127.0.0.1:18086",
-    "isolated_host_auth_passed":true,
-    "one_registered_runner_seen_online":true,
-    "registered_test_projects":1,
-    "workers_launched":0,
-    "runner_clean_exit":true,
-    "server_clean_exit":true,
-    "tunnel_identity_provisioned":true,
-    "candidate_chatgpt_connection_established":true,
-    "live_test_server_pid":7140,
-    "live_test_runner_client_id":"pr6-acceptance-20261023",
-    "test_tunnel_ready":true,
-    "test_local_mcp_ready":true,
-    "supervised_launcher_job_id":"wc_job_yh1vVWJ6ZrIUwFxf"
+    "workflow_run_id": 39909520529,
+    "artifact_id": 12481869213,
+    "exact_source_commit": "c2d19dc9af63e966af5509a17ebb0b568cb1731d",
+    "exe_names": [
+      "webcodex.exe",
+      "webcodex-server.exe",
+      "webcodex-runner.exe"
+    ],
+    "three_checksums_verified": true,
+    "loopback_addr": "127.0.0.1:18086",
+    "isolated_host_auth_passed": true,
+    "one_registered_runner_seen_online": true,
+    "registered_test_projects": 1,
+    "workers_launched": 0,
+    "runner_clean_exit": true,
+    "server_clean_exit": true,
+    "tunnel_identity_provisioned": true,
+    "candidate_chatgpt_connection_established": true,
+    "live_test_server_pid": 7140,
+    "live_test_runner_client_id": "pr6-acceptance-20261023",
+    "test_tunnel_ready": true,
+    "test_local_mcp_ready": true,
+    "supervised_launcher_job_id": "wc_job_yh1vVWJ6ZrIUwFxf"
   },
   "candidate_windows_build": {
-    "workflow_run_id":39718838414,
-    "branch":"diagnostic/host-candidate-binary-20261022",
-    "source_commit":"c2d19dc9af63e966af5509a17ebb0b568cb1731d",
-    "build_job_status":"success",
-    "artifact_id":12400203704,
-    "binary_verified":true,
-    "binary_sha256":"a2d9eda2370816738dee8cfd1d649eb8ec8b6148c5c2d7e1a0e694957385ff84",
-    "loopback_smoke_status":"passed",
-    "health_http_status":200,
-    "anonymous_mcp_http_status":401,
-    "authorized_mcp_http_status":200,
-    "presentation_tools":["present_agent_continuation","present_job_terminal_continuation"],
-    "isolated_host_exited_cleanly":true,
-    "chatgpt_connector_registered_to_candidate":true
+    "workflow_run_id": 39718838414,
+    "branch": "diagnostic/host-candidate-binary-20261022",
+    "source_commit": "c2d19dc9af63e966af5509a17ebb0b568cb1731d",
+    "build_job_status": "success",
+    "artifact_id": 12400203704,
+    "binary_verified": true,
+    "binary_sha256": "a2d9eda2370816738dee8cfd1d649eb8ec8b6148c5c2d7e1a0e694957385ff84",
+    "loopback_smoke_status": "passed",
+    "health_http_status": 200,
+    "anonymous_mcp_http_status": 401,
+    "authorized_mcp_http_status": 200,
+    "presentation_tools": [
+      "present_agent_continuation",
+      "present_job_terminal_continuation"
+    ],
+    "isolated_host_exited_cleanly": true,
+    "chatgpt_connector_registered_to_candidate": true
   },
   "github_ci": [
-    {"run_id":39713539023,"name":"CI","conclusion":"success"},
-    {"run_id":39713484909,"name":"Host continuation diagnostic acceptance","conclusion":"success"}
+    {
+      "run_id": 39713539023,
+      "name": "CI",
+      "conclusion": "success"
+    },
+    {
+      "run_id": 39713484909,
+      "name": "Host continuation diagnostic acceptance",
+      "conclusion": "success"
+    }
   ],
   "test_connector_route_check": {
-    "checked_on":"2026-10-23",
-    "test_plugin_name":"WebCodex 测试",
-    "production_plugin_name":"WebCodex 幻16",
-    "same_server_process":false,
-    "observed_server_commit":"c2d19dc9af63e966af5509a17ebb0b568cb1731d",
-    "observed_server_pid":7140,
-    "same_runner_instance":false,
-    "test_tunnel_credentials_present_on_candidate":false,
-    "routed_to_pr6_candidate":true,
-    "observed_test_server_commit":"c2d19dc9af63e966af5509a17ebb0b568cb1731d",
-    "observed_test_server_pid":7140,
-    "observed_test_projects":1,
-    "observed_production_server_pid":13236,
-    "isolated_test_readme_read_via_connector":true,
-    "separate_tunnel_id_confirmed":true,
-    "production_tunnel_owner_pid":4844,
-    "test_tunnel_owner_pid":12648,
-    "two_profiles_share_desktop_production_env":true,
-    "test_autostart_enabled":false,
-    "test_profile_enabled":false,
-    "test_owner_process_absent":true,
-    "previous_test_fence_archived":true,
-    "current_test_tunnel_has_new_run_fence":true,
-    "test_fence_exact_run_archived_with_approval":true,
-    "prior_tunnel_actions_replayed":false,
-    "test_fence_lock_observed_free":true,
-    "exact_run_recovery_approval_required":false,
-    "safe_handoff_script":"scripts/pr6_isolated_test_tunnel.mjs",
-    "safe_handoff_preflight_passed":true,
-    "safe_handoff_ready_at_launch":true,
-    "isolated_launcher_now_running":true
+    "checked_on": "2026-10-23",
+    "test_plugin_name": "WebCodex 测试",
+    "production_plugin_name": "WebCodex 幻16",
+    "same_server_process": false,
+    "observed_server_commit": "c2d19dc9af63e966af5509a17ebb0b568cb1731d",
+    "observed_server_pid": 7140,
+    "same_runner_instance": false,
+    "test_tunnel_credentials_present_on_candidate": false,
+    "routed_to_pr6_candidate": true,
+    "observed_test_server_commit": "c2d19dc9af63e966af5509a17ebb0b568cb1731d",
+    "observed_test_server_pid": 7140,
+    "observed_test_projects": 1,
+    "observed_production_server_pid": 13236,
+    "isolated_test_readme_read_via_connector": true,
+    "separate_tunnel_id_confirmed": true,
+    "production_tunnel_owner_pid": 4844,
+    "test_tunnel_owner_pid": 12648,
+    "two_profiles_share_desktop_production_env": true,
+    "test_autostart_enabled": false,
+    "test_profile_enabled": false,
+    "test_owner_process_absent": true,
+    "previous_test_fence_archived": true,
+    "current_test_tunnel_has_new_run_fence": true,
+    "test_fence_exact_run_archived_with_approval": true,
+    "prior_tunnel_actions_replayed": false,
+    "test_fence_lock_observed_free": true,
+    "exact_run_recovery_approval_required": false,
+    "safe_handoff_script": "scripts/pr6_isolated_test_tunnel.mjs",
+    "safe_handoff_preflight_passed": true,
+    "safe_handoff_ready_at_launch": true,
+    "isolated_launcher_now_running": false,
+    "last_known_test_tunnel_connection_live": false,
+    "new_test_tunnel_run_fence_recovery_pending": true
   },
-  "readiness": {"production_auto_resume_available":false,"independent_host_turn_evidence":false,"release_ready":false},
+  "readiness": {
+    "production_auto_resume_available": false,
+    "independent_host_turn_evidence": false,
+    "release_ready": false
+  },
   "production_baseline": {
-    "host_commit":"683256d7cd93267f65cce301055cacf17667fd54",
-    "kind":"job_terminal_continuation",
-    "job_id":"wc_job_f2LEmtCq0p7XaAwY",
-    "wait_id":"wc_job_wait_W2hjfeYW2kFhcAjT",
-    "observed_model_tool_call":"observe_jobs",
-    "job_exit_code":0,
-    "wait_replayed":true,
-    "wait_delivery_state":"delivered",
-    "independent_host_turn_id":false,
-    "visibility_verified":false,
-    "qualifies_as_pr6_host_acceptance":false
+    "host_commit": "683256d7cd93267f65cce301055cacf17667fd54",
+    "kind": "job_terminal_continuation",
+    "job_id": "wc_job_f2LEmtCq0p7XaAwY",
+    "wait_id": "wc_job_wait_W2hjfeYW2kFhcAjT",
+    "observed_model_tool_call": "observe_jobs",
+    "job_exit_code": 0,
+    "wait_replayed": true,
+    "wait_delivery_state": "delivered",
+    "independent_host_turn_id": false,
+    "visibility_verified": false,
+    "qualifies_as_pr6_host_acceptance": false
   },
   "first_candidate_job_probe": {
-    "case_id":"job.short.foreground",
-    "attempted":true,
-    "tool_gateway_blocked_by_platform_safety":true,
-    "registered_tool_risk":"job_run",
-    "registered_tool_approval":"standard",
-    "registered_tool_required_scope":"job:run",
-    "runner_shell_async_jobs_supported":true,
-    "runner_policy_allow_raw_shell":true,
-    "runner_job_concurrency_available":4,
-    "server_run_job_audit_events_seen":0,
-    "server_trace_capture_mode":"off",
-    "root_cause_disclosed_by_platform":false,
-    "alternate_execution_attempted":false,
-    "diagnostic_report":"docs/implementation/pr6-chatgpt-run-job-safety-block-20261023.md",
-    "job_created":false,
-    "model_fresh_turn_verified":false,
-    "count_as_case_run":false
+    "case_id": "job.short.foreground",
+    "attempted": true,
+    "tool_gateway_blocked_by_platform_safety": true,
+    "registered_tool_risk": "job_run",
+    "registered_tool_approval": "standard",
+    "registered_tool_required_scope": "job:run",
+    "runner_shell_async_jobs_supported": true,
+    "runner_policy_allow_raw_shell": true,
+    "runner_job_concurrency_available": 4,
+    "server_run_job_audit_events_seen": 0,
+    "server_trace_capture_mode": "off",
+    "root_cause_disclosed_by_platform": false,
+    "alternate_execution_attempted": false,
+    "diagnostic_report": "docs/implementation/pr6-chatgpt-run-job-safety-block-20261023.md",
+    "job_created": false,
+    "model_fresh_turn_verified": false,
+    "count_as_case_run": false
   },
   "real_host_cases": [
-    {"id":"agent.short.foreground","status":"not_run"},
-    {"id":"agent.long.foreground","status":"not_run"},
-    {"id":"agent.long.background","status":"not_run"},
-    {"id":"job.short.foreground","status":"not_run"},
-    {"id":"job.long.foreground","status":"not_run"},
-    {"id":"job.long.background","status":"not_run"}
+    {
+      "id": "agent.short.foreground",
+      "status": "not_run"
+    },
+    {
+      "id": "agent.long.foreground",
+      "status": "not_run"
+    },
+    {
+      "id": "agent.long.background",
+      "status": "not_run"
+    },
+    {
+      "id": "job.short.foreground",
+      "status": "not_run"
+    },
+    {
+      "id": "job.long.foreground",
+      "status": "not_run"
+    },
+    {
+      "id": "job.long.background",
+      "status": "not_run"
+    }
   ],
   "supplemental_cases": [
-    {"id":"closed_tab_reopen","status":"not_run"},
-    {"id":"physical_wan_outage","status":"not_run"}
-  ]
+    {
+      "id": "closed_tab_reopen",
+      "status": "not_run"
+    },
+    {
+      "id": "physical_wan_outage",
+      "status": "not_run"
+    }
+  ],
+  "current_development_priority": {
+    "updated_on": "2026-10-23",
+    "plan": "docs/implementation/host-continuation-active-wake-priorities-20261023.md",
+    "p0": "normal_network_visible_agent_work_done_to_gpt_fresh_turn_exact_wake_next_task",
+    "p1": "normal_network_orca_workflow_and_host_native_background",
+    "p2": "network_fluctuations_and_recovery",
+    "latest_pr6_head": "8d37dd3e2853806e2c4e38af45d7076f4c425aeb",
+    "latest_head_ci_status": "success",
+    "latest_head_windows_trio_build_status": "success",
+    "latest_head_local_runtime_verified": false,
+    "latest_head_real_chatgpt_auto_wake_verified": false
+  }
 }

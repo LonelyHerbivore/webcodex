@@ -1,5 +1,7 @@
 # Host continuation release gate — 2026-10-22
 
+**Priority updated 2026-10-23:** [normal-network GPT automatic continuation comes first](host-continuation-active-wake-priorities-20261023.md). P0 = real Agent completion -> fresh GPT turn -> exact Wake consumed -> next task. Network fluctuations deferred to P2. This changes the implementation order, not the historical full-release audit.
+
 **Classification: diagnostic only / NOT release-ready.** This is an operator handoff and evidence inventory, not a ChatGPT Host turn attestation. Do not merge PR #6 or deploy the Host candidate based on GitHub CI alone.
 
 ## Immutable code and CI evidence
