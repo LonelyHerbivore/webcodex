@@ -41,6 +41,17 @@
     {"run_id":39713539023,"name":"CI","conclusion":"success"},
     {"run_id":39713484909,"name":"Host continuation diagnostic acceptance","conclusion":"success"}
   ],
+  "test_connector_route_check": {
+    "checked_on":"2026-10-23",
+    "test_plugin_name":"WebCodex 测试",
+    "production_plugin_name":"WebCodex 幻16",
+    "same_server_process":true,
+    "observed_server_commit":"683256d7cd93267f65cce301055cacf17667fd54",
+    "observed_server_pid":13236,
+    "same_runner_instance":true,
+    "test_tunnel_credentials_present_on_candidate":false,
+    "routed_to_pr6_candidate":false
+  },
   "readiness": {"production_auto_resume_available":false,"independent_host_turn_evidence":false,"release_ready":false},
   "production_baseline": {
     "host_commit":"683256d7cd93267f65cce301055cacf17667fd54",

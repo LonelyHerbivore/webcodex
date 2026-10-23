@@ -73,6 +73,13 @@ For each case, retain only redacted independent UTC evidence: original final, tr
 - In one complete, real Windows process test, the isolated Server started and passed authentication. The separate Runner connected via WebSocket; MCP `get_runtime_status` reported `runners.online_count=1`, one Project, zero Workers started. `--stop-on-stdin-eof` stopped the test Runner and Server cleanly, both exit code 0. Production Server `0.5.0-rc.2 / 683256d7`, original Runner and Orca were untouched.
 - **External blocker:** a distinct OpenAI Secure MCP Tunnel identity and restricted control-plane key have not been configured in the local execution environment or Windows user environment. Registering a custom ChatGPT MCP app requires the user's explicit Tunnel selection/authorization. Do not reuse the production Tunnel identity or elevate credentials merely for a test. No isolated candidate is currently connected to ChatGPT; all six real Host turn cases remain `not_run`, release blocked.
 
+
+## ChatGPT 「WebCodex 测试」 connector routing inspection (2026-10-23)
+
+- The user created and explicitly selected a separate ChatGPT connector named **WebCodex 测试**. Its authorized read-only `get_runtime_status` succeeded. A simultaneous read through **WebCodex 幻16** returned exactly the **same production Server process PID 13236**, version `0.5.0-rc.2`, Git commit `683256d7cd93267f65cce301055cacf17667fd54`, Runner instance `20c220ec-cee0-4b81-80d4-8de8e4fc51d5`, and 27 registered projects. Thus two app entries currently route to the **same production Server**, despite distinct UI names.
+- The isolated candidate binary and local config still exist at D-drive loopback `127.0.0.1:18086`; there was no listener on port 18086 when inspected. The isolated env file, current process env and Windows user env did not contain a test `CONTROL_PLANE_TUNNEL_ID` or `CONTROL_PLANE_API_KEY` (presence checks only; no secret values accessed).
+- **Next authorization gate:** provision an independent OpenAI Secure MCP Tunnel targeting the isolated PR #6 Server, then bind the **WebCodex 测试** ChatGPT app to that exact tunnel via the user's developer-mode UI. Merely naming another connector does not move its upstream route. Preserve production Tunnel/Server. Re-run both app `get_runtime_status` and demand different Host commit/PID and exactly one test Runner/project before claiming PR #6 app routing. No automatic model turns or candidate Host acceptance have been run through this test connector yet.
+
 ## Current status
 
 - GitHub CI and diagnostic CI: **PASS** at exact PR #6 SHA.
