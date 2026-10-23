@@ -68,14 +68,14 @@ console.log(JSON.stringify({
   candidate_commit:expected,
   candidate_loopback:'127.0.0.1:18086',
   credentials:'already available locally; kept in memory only',
-  ready_to_start:!active&&!test.autostart&&test.enabled,
-  next:active?'Stop the Test profile in WebCodex Desktop and turn off its autostart; never kill PID or remove its run fence.':test.autostart?'Turn off the Test profile autostart in WebCodex Desktop before running.':'Run this script with run and keep stdin open',
+  ready_to_start:!active&&!test.autostart&&!test.enabled,
+  next:active?'Test owner stopped but run fence remains: diagnose uncertain last run and obtain explicit archival approval; do not delete the fence.':test.autostart||test.enabled?'Disable the Test profile and its autostart in Desktop before manual isolated use.':'Run this script with run and keep stdin open',
 }));
 
 if(mode==='status')process.exit(0);
 assert.ok(!active,'Test tunnel still running/uncertain: fail closed; do not bypass its restart fence');
 assert.ok(!test.autostart,'Test profile autostart still enabled; refuse racing Desktop relaunch');
-assert.ok(test.enabled,'Desktop Test identity has been disabled; explicit reauthorization required');
+assert.ok(!test.enabled,'Desktop Test identity still enabled; refuse Desktop/manual owner races');
 
 const url='http://127.0.0.1:18086';
 let alreadyUp=false;

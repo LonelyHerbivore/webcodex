@@ -89,6 +89,15 @@ For each case, retain only redacted independent UTC evidence: original final, tr
 - Added `scripts/pr6_isolated_test_tunnel.mjs` with `status` and `run` modes; syntax and safe status preflight passed. It selects the exact named **Test** identity from the Desktop profile store, checks it differs from production and its RunFence is absent and autostart off, verifies the fixed PR #6 binaries' three checksums, and launches the isolated Server/Runner/Tunnel only on `127.0.0.1:18086`. Tunnel ID and API Key remain **memory-only in the Tunnel child**; no copies to D or logs, no credential in command-line arguments. The launcher prevents unmanaged clipboard writes and requires an observed control-plane ready event. Closing its stdin gracefully stops the owned processes; uncertain stop state remains fenced.
 - At the recorded preflight, **Test was still active at PID 12648 and autostart was enabled**. The new launcher correctly returns `ready_to_start=false`; therefore no new Tunnel process, credential changes, real ChatGPT turn or real Host acceptance occurred. Only the Test Tunnel's Desktop owner should be stopped through normal UI; do not kill PID 12648, and do not touch production PID 4844.
 
+
+## Test Tunnel stop verified; restart fence requires recovery approval (2026-10-23)
+
+- Following the user's “Test 已停止”, Desktop `Test` is `enabled=false, autostart=false`; its previous owner PID `12648` is absent. Production `ChatGPT` is still `enabled=true, autostart=true`, and its owner remains alive. The `Test` lock file can be acquired non-blockingly and released, proving no current lock holder at observation time.
+- The *Test* `.active` fence still exists. According to `crates/webcodex-openai-tunnel/src/run_fence.rs`, clean completed delivery clears the fence; persistence after a dead owner means `tunnel_restart_uncertain`. Its absence of an owner is **not** proof of completed notification/response delivery. No PID was killed and no `.active`/`.lock` was removed or renamed.
+- Corrected `scripts/pr6_isolated_test_tunnel.mjs`: manual ownership requires `enabled=false` and `autostart=false` in Desktop, and a fully cleared/explicitly recovered exact-run fence. The safe preflight still blocks (`ready_to_start=false`).
+- Windows environment-recovery apply in `crates/webcodex-environment/src/tunnel_recovery.rs` explicitly rejects non-Unix apply; the native `run_fence::archive` supports exact-run operator archival only after holding the exclusive lock, proving the recorded owner absent and **accepting prior-effect uncertainty**. Do not casually delete the marker or fake completed delivery. Request explicit user approval before exact-run archival, preserving a private `.recovered/{run_id}` record, with zero replay of earlier requests.
+- PR #6 candidate 0/6 independent ChatGPT Host cases remains unchanged; no new Tunnel started.
+
 ## Current status
 
 - GitHub CI and diagnostic CI: **PASS** at exact PR #6 SHA.

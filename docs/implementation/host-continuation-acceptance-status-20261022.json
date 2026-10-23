@@ -55,7 +55,12 @@
     "production_tunnel_owner_pid":4844,
     "test_tunnel_owner_pid":12648,
     "two_profiles_share_desktop_production_env":true,
-    "test_autostart_enabled":true,
+    "test_autostart_enabled":false,
+    "test_profile_enabled":false,
+    "test_owner_process_absent":true,
+    "test_fence_active_marker_retained":true,
+    "test_fence_lock_observed_free":true,
+    "exact_run_recovery_approval_required":true,
     "safe_handoff_script":"scripts/pr6_isolated_test_tunnel.mjs",
     "safe_handoff_preflight_passed":true,
     "safe_handoff_ready_to_start":false
