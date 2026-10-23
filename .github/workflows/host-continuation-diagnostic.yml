@@ -45,7 +45,7 @@ jobs:
         run: cargo test --locked -p webcodex-store job_terminal_wait
 
   win-host-candidate:
-    name: Exact PR6 Windows Host binary (manual diagnostic only)
+    name: Exact PR6 Windows runtime trio (manual diagnostic only)
     if: github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
     timeout-minutes: 75
@@ -76,27 +76,31 @@ jobs:
           if ($source -ne $env:WEBCODEX_GIT_COMMIT) { throw "PR6 checkout SHA mismatch" }
           $builtAt = (git show -s --format=%ct HEAD).Trim()
           $env:WEBCODEX_BUILT_AT = $builtAt
-          cargo build --locked --profile dogfood -p webcodex --bin webcodex-server
+          cargo build --locked --profile dogfood -p webcodex -p webcodex-cli -p webcodex-runner
           if ($LASTEXITCODE -ne 0) { throw "Host compile failed" }
-          $exe = 'target/dogfood/webcodex-server.exe'
-          if (!(Test-Path $exe)) { throw "Host binary missing" }
-          $actual = (& $exe --version | Out-String).Trim()
-          if ($LASTEXITCODE -ne 0) { throw "Host --version failed" }
           $version = (node -p "require('./npm/webcodex/package.json').version").Trim()
-          $expected = "webcodex-server $version (commit $source, dirty=false, built_at=$builtAt)"
-          if ($actual -ne $expected) { throw "Host identity mismatch: $actual" }
           New-Item -ItemType Directory -Path candidate | Out-Null
-          Copy-Item $exe candidate/webcodex-server.exe
-          $hash = (Get-FileHash candidate/webcodex-server.exe -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash  webcodex-server.exe" | Set-Content candidate/SHA256SUMS.txt
+          $lines = @()
+          foreach ($name in @('webcodex', 'webcodex-server', 'webcodex-runner')) {
+            $exe = "target/dogfood/$name.exe"
+            if (!(Test-Path $exe)) { throw "Missing candidate binary: $exe" }
+            $actual = (& $exe --version | Out-String).Trim()
+            if ($LASTEXITCODE -ne 0) { throw "Identity probe failed: $name" }
+            $expected = "$name $version (commit $source, dirty=false, built_at=$builtAt)"
+            if ($actual -ne $expected) { throw "Candidate identity mismatch: $actual" }
+            Copy-Item $exe "candidate/$name.exe"
+            $hash = (Get-FileHash "candidate/$name.exe" -Algorithm SHA256).Hash.ToLowerInvariant()
+            $lines += "$hash  $name.exe"
+          }
+          $lines | Set-Content candidate/SHA256SUMS.txt
           "source_commit=$source" | Set-Content candidate/BUILD_ID.txt
           "built_at=$builtAt" | Add-Content candidate/BUILD_ID.txt
-          "version=$actual" | Add-Content candidate/BUILD_ID.txt
-          Write-Output "Verified candidate identity: $actual"
+          "version=$version" | Add-Content candidate/BUILD_ID.txt
+          Write-Output "Verified exact source identities for all three candidate executables"
       - name: Upload candidate binary for isolated testing only
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: pr6-windows-host-c2d19dc9
+          name: pr6-windows-runtime-c2d19dc9
           path: candidate/
           if-no-files-found: error
           retention-days: 3
