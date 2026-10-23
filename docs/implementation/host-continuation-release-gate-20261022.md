@@ -112,6 +112,14 @@ For each case, retain only redacted independent UTC evidence: original final, tr
 - Candidate Server retained ActionAudit contains no matching `run_job` call. Server trace capture was off, so the precise ChatGPT safety rule and backend-routing disposition are not independently observable. Official ChatGPT guidance says certain MCP actions can be safety-blocked without an approval prompt, and permissive app settings cannot override this.
 - Full sanitized support-ready evidence: [PR6 ChatGPT execution-tool safety block](pr6-chatgpt-run-job-safety-block-20261023.md). Respect the refusal; no alternate tool execution to circumvent it. Six candidate Host fresh-turn cases remain **0/6** and PR #6 stays Draft.
 
+
+## Offline PR #6 release ledger guard (FastCtx development, 2026-10-23)
+
+- Added \`scripts/check_pr6_release_gate.mjs\` and six \`node:test\` regression cases in \`scripts/check_pr6_release_gate.test.mjs\`. These operate on diagnostic JSON only; no Tunnel, Host, Runner, Job, Wake, or private credential is accessed.
+- Verifies candidate SHA consistency, distinct isolated/production Host identity, offline ledger schema, six unique **not_run** case records, and that a ChatGPT safety-blocked call did not create a Job or falsely count as model continuation. Rejects forged \`release_ready\`, \`independent_host_turn_evidence\`, or \`production_auto_resume_available\` flags.
+- Normal invocation: \`node scripts/check_pr6_release_gate.mjs\`. A valid blocked-status ledger exits **0** with \`releaseAuthorized=false\`; mismatched gate exits **1**; unreadable or malformed input exits **2**. The script intentionally has **no authority to approve any release**.
+- Ran through WebCodex's registered **FastCtx** (production-side MCP gateway), targeting only this isolated diagnostic checkout. Existing Agent Wake/Job Terminal/evidence \`node --test\` suites passed **241/241**; new guard tests passed **6/6**. The independent six real Host turn cases remain **0/6**, PR #6 Draft unchanged. This is regression infrastructure progress, not a workaround for the blocked \`run_job\` invocation.
+
 ## Current status
 
 - GitHub CI and diagnostic CI: **PASS** at exact PR #6 SHA.
