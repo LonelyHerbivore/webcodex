@@ -84,6 +84,36 @@ async function boundView(options = { deliverToolMeta: false }) {
   return view;
 }
 
+test("fast Agent completion waits for initial presentation turn to yield before one ui/message", async () => {
+  const view = app("mcp_agent_continuation_app.html");
+  await view.initialize();
+  view.toolInput(input);
+  view.toolResult({ agent_continuation: projection });
+  await view.reply(view.calls("bind_agent_continuation")[0], toolResult({ agent_continuation: projection }));
+  await view.reply(view.calls("get_agent_continuation_state")[0], toolResult({ agent_continuation: projection }));
+  assert.equal(view.calls("acquire_agent_continuation_wake").length, 0,
+    "wake must remain unclaimed while presentation turn may still be running");
+  assert.equal(hostMessages(view).length, 0);
+
+  await view.fireTimers(3000);
+  await view.reply(view.calls("get_agent_continuation_state").at(-1), toolResult({ agent_continuation: projection }));
+  assert.equal(view.calls("acquire_agent_continuation_wake").length, 0);
+  view.toolResult({ agent_continuation: projection }); // A duplicate result cannot reset the yield deadline.
+  view.advanceTime(7000);
+
+  await view.fireTimers(3000);
+  await view.reply(view.calls("get_agent_continuation_state").at(-1), toolResult({ agent_continuation: projection }));
+  assert.equal(view.calls("acquire_agent_continuation_wake").length, 1);
+  await view.reply(view.calls("acquire_agent_continuation_wake")[0], toolResult({ wake }));
+  await view.reply(view.calls("prepare_agent_continuation_wake")[0], prepared());
+  assert.equal(hostMessages(view).length, 1);
+  await view.reply(hostMessages(view)[0], {});
+  await view.reply(view.calls("finish_agent_continuation_wake")[0], toolResult({}));
+  await view.visibility(true);
+  await view.visibility(false);
+  assert.equal(hostMessages(view).length, 1, "visibility changes never duplicate automatic GPT messages");
+});
+
 test("Agent Wait card tracks waiting -> triggered -> resuming -> resumed without a second dispatcher", async () => {
   const view = app("mcp_agent_continuation_app.html");
   await view.initialize();
@@ -97,6 +127,7 @@ test("Agent Wait card tracks waiting -> triggered -> resuming -> resumed without
   });
   const quiet = { ...projection, wake: null, queued_delivery_count: 0 };
   view.toolResult({ agent_wait: { wait_id: waitId, state: "waiting" }, agent_continuation: quiet });
+  view.advanceTime(10000); // The invoking ChatGPT turn has yielded.
   await view.reply(view.calls("bind_agent_continuation")[0], toolResult({ agent_continuation: quiet }));
   assert.notEqual(view.nodes.waitSummary?.hidden, false, "sparse model reference has no revision or target proof");
   await view.reply(view.calls("get_agent_continuation_state").at(-1), toolResult({ agent_continuation: quiet }));
@@ -176,6 +207,7 @@ test("Agent Wait card never filters a competing non-Wait Agent Wake", async () =
   const quiet = { ...projection, wake: null, queued_delivery_count: 0 };
   const oneSourceWait = { ...waitingWait, source_count: 1, sources: waitingWait.sources.slice(0, 1) };
   view.toolResult({ agent_wait: { wait_id: waitId, state: "waiting" }, agent_continuation: quiet });
+  view.advanceTime(10000); // The invoking ChatGPT turn has yielded.
   await view.reply(view.calls("bind_agent_continuation")[0], toolResult({ agent_continuation: quiet }));
 
   const inboxWake = { ...wake, state: "pending", revision: 1 };
