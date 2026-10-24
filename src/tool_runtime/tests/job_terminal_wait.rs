@@ -933,6 +933,28 @@ async fn prepare_orca_host_worker_continuation_durably_fences_authorized_project
     assert!(saved.job_id.is_none());
     assert_ne!(saved.request_digest,"Read-only task");
     assert_eq!(saved.request_digest.len(),64);
+    let dispatched=db.transition_orca_host_intent(
+        &principal,"original_worker_prepare_12345",
+        "reserved","worker_start_dispatched",None,None,None,None,
+        chrono::Utc::now().timestamp()
+    ).unwrap();
+    assert_eq!(dispatched.state,"worker_start_dispatched");
+    let uncertain=runtime.dispatch_with_auth(make("Read-only task"),Some(&owner)).await;
+    assert!(uncertain.success,"{:?}",uncertain.error);
+    assert_eq!(uncertain.output["status"],"original_host_intent_recovered");
+    assert_eq!(uncertain.output["worker_started"],false);
+    assert_eq!(uncertain.output["prior_effect_may_have_happened"],true);
+    db.transition_orca_host_intent(
+        &principal,"original_worker_prepare_12345",
+        "worker_start_dispatched","worker_start_confirmed",
+        Some(("ctx_original","task_original")),None,None,None,
+        chrono::Utc::now().timestamp()
+    ).unwrap();
+    let confirmed=runtime.dispatch_with_auth(make("Read-only task"),Some(&owner)).await;
+    assert!(confirmed.success,"{:?}",confirmed.error);
+    assert_eq!(confirmed.output["state"],"worker_start_confirmed");
+    assert_eq!(confirmed.output["worker_started"],true);
+    assert_eq!(confirmed.output["prior_effect_may_have_happened"],true);
     let foreign_read=runtime.dispatch_with_auth(ToolCall::ReadOrcaHostIntent {
         idempotency_key:"original_worker_prepare_12345".to_owned(),
     },Some(&foreign)).await;

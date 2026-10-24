@@ -168,18 +168,35 @@ impl ToolRuntime {
         match db.reserve_orca_host_intent(
             &principal,&request,chrono::Utc::now().timestamp()
         ) {
-            Ok(mutation)=>ToolResult::ok(json!({
-                "status":"original_host_intent_reserved",
+            Ok(mutation)=>{
+                let stage=mutation.intent.state.as_str();
+                let worker_started=matches!(stage,
+                    "worker_start_confirmed"|"watch_start_dispatched"|
+                    "watch_job_confirmed"|"wait_registration_dispatched"|
+                    "wait_registered"|"registered");
+                let prior_effect_may_have_happened=stage!="reserved";
+                ToolResult::ok(json!({
+                "status":if mutation.replayed {
+                    "original_host_intent_recovered"
+                } else {
+                    "original_host_intent_reserved"
+                },
                 "state":mutation.intent.state,
                 "replayed":mutation.replayed,
                 "project_id":mutation.intent.project_id,
                 "run_id":mutation.intent.run_id,
                 "coordinator_handle":mutation.intent.coordinator_handle,
                 "idempotency_key":mutation.intent.idempotency_key,
-                "worker_started":false,
+                "worker_started":worker_started,
+                "prior_effect_may_have_happened":prior_effect_may_have_happened,
                 "host_wake_verified":false,
-                "guidance":"Only durable Host authorization context was reserved. No Worker, Job or Wait was started or bound. Every later effect must move this original intent under Host ownership and must not repeat after uncertain outcome.",
-            })),
+                "guidance":if mutation.replayed {
+                    "Prior Host intent was recovered. This replay starts no new Worker, Job or Wait. Inspect exact original state and independently reconcile uncertain effects."
+                } else {
+                    "Durable Host intent reserved. No Worker, Job or Wait started by this call; subsequent effects require Host ownership and stage transition."
+                },
+                }))
+            },
             Err(error)=>ToolResult::err_with_output(
                 "Original Host Worker intent reservation refused",
                 json!({"error_kind":error.code}),

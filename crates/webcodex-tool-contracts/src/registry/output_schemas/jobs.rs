@@ -1633,7 +1633,8 @@ pub(super) fn output_schema_for_tool(name: &str) -> Option<Value> {
             ("project_id", schema_type("string", "Exact caller-authorized Project.")),
             ("run_id", schema_type("string", "Original Orca Run identity.")),
             ("idempotency_key", schema_type("string", "Original caller-stable request key.")),
-            ("worker_started", schema_type("boolean", "Always false in a fresh reservation.")),
+            ("worker_started", schema_type("boolean", "True only after durable original Worker launch confirmation.")),
+            ("prior_effect_may_have_happened", schema_type("boolean", "True if this original intent has crossed an external-effect dispatch fence; requires reconciliation.")),
             ("host_wake_verified", schema_type("boolean", "Always false for reservation.")),
         ])),
         "read_orca_host_intent" => Some(wrapped_output_schema(vec![
