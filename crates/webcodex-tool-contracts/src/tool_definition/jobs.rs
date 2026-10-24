@@ -510,6 +510,30 @@ pub(super) const LISTING_DEFINITIONS: &[ToolDefinition] = &[
     require_all_scopes(
         model_spec(
             def(
+                "register_orca_host_wait_and_present",
+                super::ToolAuditPolicy::typed_fields(&[
+                    super::ToolAuditResultField::value("status"),
+                    super::ToolAuditResultField::value("state"),
+                    super::ToolAuditResultField::value("error_kind"),
+                ]),
+                ModelVisible, TOOL_CATEGORY_JOB, None,
+                TOOL_PROVIDER_NATIVE,
+                super::ToolSemanticContract {
+                    effect: super::ToolEffect::Mutate, risk: Read,
+                    approval: super::ToolApprovalPolicy::None,
+                    idempotency: super::ToolIdempotency::Keyed,
+                },
+                Some(RUNTIME_READ),false,NoPath,false,false,
+                super::ToolSessionEvidencePolicy::NONE,
+            ),
+            "Register one exact Host continuation Wait for a caller-authorized original Orca watcher Job previously confirmed by Host Store. The original Host Wait idempotency key is deterministic and phase transitions are durably fenced before Host registration. The existing Host API independently validates Runner Job visibility and presents only a still-waiting Wait card in the current authorized Window. Uncertain registration or presentation never starts a second Worker or watcher. A card is not proof of an unattended GPT model turn.",
+        ),
+        &[JOB_RUN],
+    ),
+
+    require_all_scopes(
+        model_spec(
+            def(
                 "start_orca_host_watcher_job",
                 super::ToolAuditPolicy::typed_fields(&[
                     super::ToolAuditResultField::value("status"),

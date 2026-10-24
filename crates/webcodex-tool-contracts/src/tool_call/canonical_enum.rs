@@ -3157,6 +3157,13 @@ pub enum ToolCall {
         idempotency_key: String,
     },
 
+    /// Persist the Host Wait for the previously admitted original Orca
+    /// watcher Job and offer its current authorized continuation card.
+    RegisterOrcaHostWaitAndPresent {
+        #[schemars(length(min = 8, max = 128))]
+        idempotency_key: String,
+    },
+
     /// Read exact caller-owned durable Orca Host continuation identity.
     ReadOrcaHostIntent {
         #[schemars(length(min = 8, max = 128))]

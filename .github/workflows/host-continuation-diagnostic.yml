@@ -63,3 +63,5 @@ jobs:
         run: cargo test --locked -p webcodex bundled_watcher_matches_plugin_first_cycle_key
       - name: Exercise bundled Node watcher with isolated Orca CLI fixtures
         run: node --test scripts/orca_host_watcher_contract.test.mjs
+      - name: Verify original Host watcher Wait register, present and replay
+        run: cargo test --locked -p webcodex register_orca_host_wait_and_present

@@ -2,7 +2,8 @@
 //! Runner executes the embedded, reviewed Node source, never a Plugin-supplied
 //! script path. Detached Job ownership is keyed and fenced before dispatch.
 use super::{ExecutionPurpose, ToolResult, ToolRuntime};
-use crate::auth::{AuthContext, SCOPE_JOB_DETACH, SCOPE_JOB_RUN, SCOPE_PROJECT_WRITE};
+use crate::auth::{AuthContext, SCOPE_JOB_RUN, SCOPE_PROJECT_WRITE};
+use webcodex_core::authority::SCOPE_JOB_DETACH;
 use crate::job_terminal_attention::principal_for_auth;
 use crate::runner_http::RunnerFeature;
 use serde_json::json;

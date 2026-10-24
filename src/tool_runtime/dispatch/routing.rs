@@ -349,6 +349,7 @@ impl ToolRuntime {
             | ToolCall::PrepareOrcaHostWorkerContinuation { .. }
             | ToolCall::StartOrcaWorkerWithHostIntent { .. }
             | ToolCall::StartOrcaHostWatcherJob { .. }
+            | ToolCall::RegisterOrcaHostWaitAndPresent { .. }
             | ToolCall::ListJobs { .. }
             | ToolCall::JobTail { .. }) => {
                 self.dispatch_job_tool(call, auth, ssh_resource, correlation, transport)

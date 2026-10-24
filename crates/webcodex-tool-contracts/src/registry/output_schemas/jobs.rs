@@ -1626,6 +1626,14 @@ pub(super) fn output_schema_for_tool(name: &str) -> Option<Value> {
             ("host_wake_verified", schema_type("boolean", "Always false; later model turn unverified.")),
             ("job_terminal_continuation", nullable_schema("object", "Only the authorized original Host card projection, when waiting.")),
         ])),
+        "register_orca_host_wait_and_present" => Some(wrapped_output_schema(vec![
+            ("status", schema_type("string", "Original Wait registered or exact outcome requiring reconciliation.")),
+            ("state", schema_type("string", "Durable original Host intent phase.")),
+            ("job_id", nullable_schema("string", "Exact original Runner Job.")),
+            ("wait_id", nullable_schema("string", "Original durable Host Wait.")),
+            ("presentation_state", schema_type("string", "Waiting card, already terminal or presentation unconfirmed.")),
+            ("host_wake_verified", schema_type("boolean", "Always false until an independently verified later GPT turn.")),
+        ])),
         "start_orca_host_watcher_job" => Some(wrapped_output_schema(vec![
             ("status", schema_type("string", "Confirmed durable watcher or requires original Job reconciliation.")),
             ("state", schema_type("string", "Original Host intent phase.")),

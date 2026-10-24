@@ -1091,3 +1091,64 @@ fn start_orca_host_watcher_job_parser_forbids_external_code_and_path() {
     injected["script"]="C:\\untrusted\\watch.js".into();
     assert!(ToolCall::from_tool_name("start_orca_host_watcher_job",injected).is_err());
 }
+
+#[tokio::test]
+async fn register_orca_host_wait_and_present_uses_exact_prior_job_and_no_second_wait() {
+    let (_temp,runtime,db)=attention_runtime().await;
+    let owner=shared_key_auth_context(&"9".repeat(64));
+    let foreign=shared_key_auth_context(&"a".repeat(64));
+    let key="original_orca_wait_test_12345";
+    let principal=principal_for_auth(Some(&owner));
+    let (job_id,request)=start_owned_job(
+        &runtime,"host-wait-project","orch-project",&owner).await;
+    db.reserve_orca_host_intent(&principal,&webcodex_store::NewOrcaHostIntent{
+        idempotency_key:key.to_owned(),request_digest:"b".repeat(64),
+        project_id:"agent:host-wait-project:orch-project".to_owned(),
+        run_id:"run_original".to_owned(),
+        coordinator_handle:"term_original".to_owned(),
+    },1000).unwrap();
+    db.transition_orca_host_intent(&principal,key,"reserved",
+        "worker_start_dispatched",None,None,None,None,1001).unwrap();
+    db.transition_orca_host_intent(&principal,key,"worker_start_dispatched",
+        "worker_start_confirmed",Some(("ctx_original","task_original")),
+        None,None,None,1002).unwrap();
+    db.transition_orca_host_intent(&principal,key,"worker_start_confirmed",
+        "watch_start_dispatched",None,None,None,None,1003).unwrap();
+    let (watch,_,_)=super::super::orca_host_watcher_job::first_watch_identity(
+        "run_original","ctx_original","task_original");
+    db.transition_orca_host_intent(&principal,key,"watch_start_dispatched",
+        "watch_job_confirmed",None,Some(&watch),Some(&job_id),
+        None,1004).unwrap();
+    let foreign_read=runtime.register_orca_host_wait_and_present(
+        key.to_owned(),Some(&foreign)).await;
+    assert!(!foreign_read.success);
+    assert_eq!(foreign_read.output["error_kind"],"orca_host_wait_intent_unknown");
+    let first=runtime.register_orca_host_wait_and_present(
+        key.to_owned(),Some(&owner)).await;
+    assert!(first.success,"{:?} {:?}",first.error,first.output);
+    assert_eq!(first.output["state"],"registered");
+    assert_eq!(first.output["job_id"],job_id);
+    assert_eq!(first.output["host_wake_verified"],false);
+    let saved=db.read_orca_host_intent(&principal,key).unwrap().unwrap();
+    assert_eq!(saved.state,"registered");
+    assert_eq!(saved.wait_id.as_deref(),first.output["wait_id"].as_str());
+    let replay=runtime.register_orca_host_wait_and_present(
+        key.to_owned(),Some(&owner)).await;
+    assert!(replay.success,"{:?}",replay.error);
+    assert_eq!(replay.output["status"],"original_host_wait_recovered");
+    assert_eq!(replay.output["wait_id"],first.output["wait_id"]);
+    complete_job(&runtime,"host-wait-project",&request,Some(1)).await;
+    let terminal=db.read_job_terminal_wait(
+        &principal,first.output["wait_id"].as_str().unwrap(),
+        chrono::Utc::now().timestamp()).unwrap();
+    assert_eq!(terminal.state,JobTerminalWaitState::Triggered);
+}
+#[test]
+fn register_orca_host_wait_and_present_rejects_injected_job_selector() {
+    let good=json!({"idempotency_key":"original_orca_wait_test_12345"});
+    assert!(matches!(ToolCall::from_tool_name("register_orca_host_wait_and_present",good.clone()).unwrap(),
+        ToolCall::RegisterOrcaHostWaitAndPresent{..}));
+    let mut bad=good;
+    bad["job_id"]=json!("wc_job_foreign");
+    assert!(ToolCall::from_tool_name("register_orca_host_wait_and_present",bad).is_err());
+}

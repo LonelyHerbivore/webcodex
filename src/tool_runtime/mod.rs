@@ -67,6 +67,7 @@ mod job_terminal_wait;
 mod orca_host_intent_tool;
 mod orca_host_worker_launch;
 mod orca_host_watcher_job;
+mod orca_host_wait_registration;
 mod orca_host_composite;
 mod job_tools;
 mod jobs;
