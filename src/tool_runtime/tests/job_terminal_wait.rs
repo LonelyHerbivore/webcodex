@@ -705,6 +705,7 @@ async fn readiness_activity_project_comes_only_from_exact_authorized_job_provena
             Some(&owner),
             None,
             &mut correlation,
+            super::super::sessions::SessionTransport::Mcp,
         )
         .await;
     assert!(dispatched.success, "{:?}", dispatched.error);
