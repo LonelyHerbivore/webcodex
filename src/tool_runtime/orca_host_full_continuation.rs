@@ -8,6 +8,27 @@ use serde_json::json;
 use webcodex_core::authority::SCOPE_JOB_DETACH;
 use crate::job_terminal_attention::managed_orca_host_principal_for_auth;
 
+/// Exact admission failure before any Orca/Runner/Host durable side effect.
+/// This is advice for obtaining supported user consent, never a credential
+/// issuance mechanism or authority escalation.
+fn host_composite_auth_denied(error_kind: &'static str) -> ToolResult {
+    ToolResult::err_with_output(
+        "A stable authorized Host owner and explicit tool scopes are required",
+        json!({
+            "status":"orca_host_composite_preflight_denied",
+            "phase":"authorization",
+            "error_kind":error_kind,
+            "worker_started":false,
+            "host_wake_verified":false,
+            "side_effects_dispatched":false,
+            "required_scopes":["job:run","project:write","plugin:invoke","job:detach"],
+            "required_identity":"stable_authenticated_runner_owner",
+            "next_user_action":"Use an approved managed-user OAuth test connection and explicitly authorize it as the existing Test Runner owner. The existing Tunnel/No authentication connector is not a user login. Do not paste credentials in chat or use bootstrap credentials as a substitute.",
+            "guidance":"No Worker, watcher Job or Wait has been created. Preserve the existing Test Tunnel; complete normal account authorization before a new test."
+        }),
+    )
+}
+
 impl ToolRuntime {
     #[allow(clippy::too_many_arguments)]
     pub(crate) async fn start_orca_worker_with_continuation(
@@ -19,30 +40,18 @@ impl ToolRuntime {
         transport:super::sessions::SessionTransport,
     )->ToolResult{
         let Some(owner)=auth else{
-            return ToolResult::err_with_output("Managed Host owner required",
-                json!({"error_kind":"orca_host_composite_unauthorized"}))
+            return host_composite_auth_denied("orca_host_composite_missing_identity")
         };
         if ![SCOPE_JOB_RUN,SCOPE_PROJECT_WRITE,SCOPE_PLUGIN_INVOKE,SCOPE_JOB_DETACH]
             .iter().all(|scope|owner.has_scope(scope)){
-            return ToolResult::err_with_output("Full Worker/Job/Plugin scope set missing",
-                json!({"error_kind":"orca_host_composite_unauthorized"}))
+            return host_composite_auth_denied("orca_host_composite_missing_scopes")
         }
         // The outer tool authority (e.g. trusted_agent) is not by itself a
         // durable principal. The exact downstream Host Intent store rejects
         // unmanaged/anonymous owner kinds. Preflight here BEFORE reserving or
         // dispatching any Worker; never misreport this as OutcomeUnknown.
         if managed_orca_host_principal_for_auth(auth).is_none() {
-            return ToolResult::err_with_output(
-                "A managed Host owner is required for Orca continuation",
-                json!({
-                    "status":"orca_host_composite_preflight_denied",
-                    "phase":"authorization",
-                    "error_kind":"orca_host_composite_managed_owner_required",
-                    "worker_started":false,
-                    "host_wake_verified":false,
-                    "guidance":"Use the supported managed Host account authority. No Worker/Job/Wait was dispatched; do not bypass identity enforcement."
-                })
-            )
+            return host_composite_auth_denied("orca_host_composite_managed_owner_required")
         }
         let project=match self.resolve_project_input_for_auth(&project_id,auth).await{
             Ok(project) if project.resolved_id==project_id=>project,

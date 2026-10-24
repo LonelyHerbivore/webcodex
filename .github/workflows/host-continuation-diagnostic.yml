@@ -30,6 +30,8 @@ jobs:
         run: node --test src/mcp_tests/agent_continuation_app.test.mjs src/mcp_tests/job_terminal_continuation_app.test.mjs src/mcp_tests/host_continuation_evidence.test.mjs
       - name: Verify diagnostic Windows PE and SHA-256 validator behavior
         run: node --test scripts/verify_orca_host_windows_artifact.test.mjs
+      - name: Check isolated managed OAuth prerequisites without reading secrets into logs
+        run: node --test scripts/pr6_managed_oauth_preflight.test.mjs
 
   rust-host-contract:
     name: Rust Host/Store compile check
@@ -71,6 +73,8 @@ jobs:
         run: cargo test --locked -p webcodex start_orca_worker_with_continuation
       - name: Deny unmanaged owners before Orca Worker external dispatch
         run: cargo test --locked -p webcodex reject_unmanaged_host_owner_before_any_worker_dispatch
+      - name: Explain missing managed owner without dispatching Worker
+        run: cargo test --locked -p webcodex orca_composite_preflight_explains_user_login_without_creating_worker_or_intent
       - name: Verify named PAT read and reject shared unowned fallback without effects
         run: cargo test --locked -p webcodex orca_host_intent_read_rejects_unowned_identity_but_allows_named_pat_without_effects
       - name: Verify exact Wait carrier reasons and no false model-turn proof
