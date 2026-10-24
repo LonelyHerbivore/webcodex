@@ -51,3 +51,19 @@ An artifact is uploaded for five days with an exact SHA-256 manifest and a
 diagnostic-only warning. This is NOT a signed release or a production update;
 never replace the active WebCodex Server/Tunnel using this build without
 separate operator authorization and isolated end-to-end acceptance.
+
+
+## Windows diagnostic Host/CLI/Runner trio
+
+The independent GitHub CI Windows job now compiles the exact source revision of
+webcodex-server.exe, webcodex.exe, and webcodex-runner.exe together. A diagnostic
+manifest contains all three binary SHA-256 hashes, source SHA, exact Windows x64
+target and run attempt. The validator rejects an absent/substituted binary,
+unknown additional file entry, wrong PE architecture, changed revision and
+the earlier single-server manifest when trio verification is explicitly required.
+Source/release/Runner executable identity is verified, not inferred from filenames.
+
+The artifact is a short-lived **unsigned** diagnostic bundle. Do not replace
+the production Host, Runner or Tunnel, and do not start an old Test Tunnel
+candidate as though it exercises this branch. Isolated tests require a matched
+candidate build and an explicit safe Test lifecycle.

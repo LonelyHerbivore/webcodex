@@ -52,3 +52,55 @@ test('rejects wrong source commit and wrong target machine',async()=>{
   await assert.rejects(verifyWindowsHostArtifact(f.root,sha),/not_windows_x64/);
  }finally{await rm(f.root,{recursive:true,force:true})}
 });
+
+async function trioFixture(){
+ const f=await fixture();
+ const binaries={};
+ for(const name of ['webcodex-server.exe','webcodex.exe','webcodex-runner.exe']){
+  const path=join(f.root,name);
+  if(name!=='webcodex-server.exe'){
+   const b=await readFile(f.exe);
+   b[250]=name==='webcodex.exe'?37:83;
+   await writeFile(path,b);
+  }
+  const b=await readFile(path);
+  binaries[name]=createHash('sha256').update(b).digest('hex');
+ }
+ delete f.data.binary;
+ delete f.data.binary_sha256;
+ f.data.binaries=binaries;
+ await writeFile(f.manifest,JSON.stringify(f.data));
+ return f;
+}
+test('requires the exact Host/CLI/Runner trio and verifies all three PE digests',async()=>{
+ const f=await trioFixture();
+ try{
+  const result=await verifyWindowsHostArtifact(f.root,sha,{requireTrio:true});
+  assert.deepEqual(Object.keys(result.binaries).sort(),
+   ['webcodex-server.exe','webcodex.exe','webcodex-runner.exe'].sort());
+  assert.equal(result.binaries['webcodex-runner.exe'].size,8192);
+ }finally{await rm(f.root,{recursive:true,force:true})}
+});
+test('rejects a single substituted Runner while Host binary remains valid',async()=>{
+ const f=await trioFixture();
+ try{
+  const runner=join(f.root,'webcodex-runner.exe');
+  const b=await readFile(runner);
+  b[310]=14;await writeFile(runner,b);
+  await assert.rejects(verifyWindowsHostArtifact(f.root,sha,{requireTrio:true}),/digest_mismatch/);
+ }finally{await rm(f.root,{recursive:true,force:true})}
+});
+test('does not accept legacy server-only manifest at the trio gate',async()=>{
+ const f=await fixture();
+ try{
+  await assert.rejects(verifyWindowsHostArtifact(f.root,sha,{requireTrio:true}),/trio_required/);
+ }finally{await rm(f.root,{recursive:true,force:true})}
+});
+test('rejects manifest with unknown or missing executable entries',async()=>{
+ const f=await trioFixture();
+ try{
+  f.data.binaries['not-trusted.exe']=f.data.binaries['webcodex.exe'];
+  await writeFile(f.manifest,JSON.stringify(f.data));
+  await assert.rejects(verifyWindowsHostArtifact(f.root,sha,{requireTrio:true}),/trio_manifest_invalid/);
+ }finally{await rm(f.root,{recursive:true,force:true})}
+});

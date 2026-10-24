@@ -71,7 +71,7 @@ jobs:
         run: cargo test --locked -p webcodex start_orca_worker_with_continuation
 
   windows-host-build:
-    name: Windows Host executable and first-party watcher
+    name: Windows Host/CLI/Runner trio and first-party watcher
     runs-on: windows-2022
     timeout-minutes: 70
     permissions:
@@ -104,20 +104,22 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          cargo build --locked -p webcodex --bin webcodex-server
-          if ($LASTEXITCODE -ne 0) { throw 'Windows Host cargo build failed' }
-          $exe = 'target/debug/webcodex-server.exe'
-          if (-not (Test-Path $exe)) { throw 'Windows Host binary is absent' }
-          $bytes = [System.IO.File]::ReadAllBytes((Resolve-Path $exe))
-          if ($bytes.Length -lt 1024 -or $bytes[0] -ne 77 -or $bytes[1] -ne 90) {
-            throw 'Host output is not a native Windows PE image'
+          cargo build --locked -p webcodex --bin webcodex-server -p webcodex-cli -p webcodex-runner
+          if ($LASTEXITCODE -ne 0) { throw 'Windows Host/CLI/Runner cargo build failed' }
+          foreach ($name in @('webcodex-server', 'webcodex', 'webcodex-runner')) {
+            $exe = "target/debug/$name.exe"
+            if (-not (Test-Path $exe)) { throw "Windows $name binary is absent" }
+            $bytes = [System.IO.File]::ReadAllBytes((Resolve-Path $exe))
+            if ($bytes.Length -lt 1024 -or $bytes[0] -ne 77 -or $bytes[1] -ne 90) {
+              throw "$name output is not a native Windows PE image"
+            }
+            $offset = [BitConverter]::ToInt32($bytes, 0x3c)
+            if ($offset -lt 64 -or $offset -gt ($bytes.Length - 6)) { throw "$name has invalid PE offset" }
+            $machine = [BitConverter]::ToUInt16($bytes, $offset + 4)
+            if ($machine -ne 0x8664) { throw "$name: expected Windows x64 PE, got $machine" }
+            & $exe --version
+            if ($LASTEXITCODE -ne 0) { throw "$name --version failed" }
           }
-          $offset = [BitConverter]::ToInt32($bytes, 0x3c)
-          if ($offset -lt 64 -or $offset -gt ($bytes.Length - 6)) { throw 'Invalid PE offset' }
-          $machine = [BitConverter]::ToUInt16($bytes, $offset + 4)
-          if ($machine -ne 0x8664) { throw "Expected Windows x64 PE, got $machine" }
-          & $exe --version
-          if ($LASTEXITCODE -ne 0) { throw 'Native WebCodex Host --version failed' }
       - name: Verify bundled watcher using Windows Node and fake Orca
         shell: pwsh
         run: |
@@ -127,34 +129,37 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $exe = 'target/debug/webcodex-server.exe'
           $out = 'target/orca-host-windows-diagnostic'
           New-Item -ItemType Directory -Force $out | Out-Null
-          Copy-Item -LiteralPath $exe -Destination (Join-Path $out 'webcodex-server.exe')
-          $hash = (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          $digests = [ordered]@{}
+          foreach ($name in @('webcodex-server', 'webcodex', 'webcodex-runner')) {
+            $exe = "target/debug/$name.exe"
+            Copy-Item -LiteralPath $exe -Destination (Join-Path $out "$name.exe")
+            $hash = (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($hash -notmatch '^[0-9a-f]{64}$') { throw "Invalid $name binary digest" }
+            $digests["$name.exe"] = $hash
+          }
           $identity = [ordered]@{
             source_repository = $env:GITHUB_REPOSITORY
             source_commit = $env:GITHUB_SHA
             workflow_run_id = $env:GITHUB_RUN_ID
             workflow_run_attempt = $env:GITHUB_RUN_ATTEMPT
             target = 'x86_64-pc-windows-msvc'
-            binary = 'webcodex-server.exe'
-            binary_sha256 = $hash
+            binaries = $digests
             purpose = 'isolated_diagnostic_only_not_signed_or_production_ready'
           }
           $identity | ConvertTo-Json -Depth 4 | Set-Content -Encoding utf8 (Join-Path $out 'manifest.json')
-          if ($hash -notmatch '^[0-9a-f]{64}$') { throw 'Invalid binary digest' }
       - name: Verify source-matched diagnostic artifact
         shell: pwsh
         run: |
           node --test scripts/verify_orca_host_windows_artifact.test.mjs
           if ($LASTEXITCODE -ne 0) { throw 'Artifact verifier regression failed' }
-          node scripts/verify_orca_host_windows_artifact.mjs target/orca-host-windows-diagnostic $env:GITHUB_SHA
+          node scripts/verify_orca_host_windows_artifact.mjs target/orca-host-windows-diagnostic $env:GITHUB_SHA --require-trio
           if ($LASTEXITCODE -ne 0) { throw 'Native artifact digest or source identity mismatch' }
       - name: Upload non-release diagnostic Host binary
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: orca-host-windows-diagnostic
+          name: orca-host-windows-trio-diagnostic
           path: target/orca-host-windows-diagnostic/
           if-no-files-found: error
           retention-days: 5
