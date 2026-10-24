@@ -888,3 +888,75 @@ fn arm_and_present_job_terminal_continuation_contract_refuses_injected_fields() 
     assert!(ToolCall::from_tool_name("arm_and_present_job_terminal_continuation",
        json!({"job_id":"wc_job_12345678","idempotency_key":"original_stable_key","command":"echo unauthorized"})).is_err());
 }
+
+#[tokio::test]
+async fn prepare_orca_host_worker_continuation_durably_fences_authorized_project_and_spec() {
+    let (_temp,runtime,db)=attention_runtime().await;
+    let mut owner=shared_key_auth_context(&"3".repeat(64));
+    let foreign=shared_key_auth_context(&"4".repeat(64));
+    let project="agent:orc-prep:proj-intent".to_string();
+    register_agent_projects_for_auth(
+        &runtime,"orc-prep",&owner,
+        RunnerCapabilities::default(),
+        vec![registered_project("proj-intent","/tmp/proj-intent")],
+    ).await;
+    let make=|spec:&str|ToolCall::PrepareOrcaHostWorkerContinuation {
+        project_id:project.clone(),
+        run_id:"run_prepared".to_owned(),
+        coordinator_handle:"term_owned".to_owned(),
+        idempotency_key:"original_worker_prepare_12345".to_owned(),
+        worker_agent:"codex".to_owned(),
+        worker_spec:spec.to_owned(),
+    };
+    let denied=runtime.dispatch_with_auth(make("Read-only task"),Some(&owner)).await;
+    assert!(!denied.success);
+    assert_eq!(denied.output["error_kind"],"orca_host_intent_unauthorized");
+    owner.scopes.push(crate::auth::SCOPE_PLUGIN_INVOKE.to_owned());
+    let first=runtime.dispatch_with_auth(make("Read-only task"),Some(&owner)).await;
+    assert!(first.success,"{:?} {:?}",first.error,first.output);
+    assert_eq!(first.output["state"],"reserved");
+    assert_eq!(first.output["worker_started"],false);
+    assert_eq!(first.output["host_wake_verified"],false);
+    assert_eq!(first.output["replayed"],false);
+    let replay=runtime.dispatch_with_auth(make("Read-only task"),Some(&owner)).await;
+    assert!(replay.success,"{:?}",replay.error);
+    assert_eq!(replay.output["replayed"],true);
+    let changed=runtime.dispatch_with_auth(make("Changed task"),Some(&owner)).await;
+    assert!(!changed.success);
+    assert_eq!(changed.output["error_kind"],"orca_host_intent_conflict");
+    let principal=principal_for_auth(Some(&owner));
+    let saved=db.read_orca_host_intent(
+        &principal,"original_worker_prepare_12345"
+    ).unwrap().unwrap();
+    assert_eq!(saved.state,"reserved");
+    assert_eq!(saved.project_id,project);
+    assert!(saved.job_id.is_none());
+    assert_ne!(saved.request_digest,"Read-only task");
+    assert_eq!(saved.request_digest.len(),64);
+    let foreign_read=runtime.dispatch_with_auth(ToolCall::ReadOrcaHostIntent {
+        idempotency_key:"original_worker_prepare_12345".to_owned(),
+    },Some(&foreign)).await;
+    assert!(foreign_read.success);
+    assert_eq!(foreign_read.output["status"],"unrecorded");
+}
+
+#[test]
+fn prepare_orca_host_worker_continuation_rejects_injected_tool_fields() {
+    let args=json!({
+        "project_id":"agent:orc-prep:proj-intent",
+        "run_id":"run_prepared",
+        "coordinator_handle":"term_owned",
+        "idempotency_key":"original_worker_prepare_12345",
+        "worker_agent":"codex",
+        "worker_spec":"simple"
+    });
+    let parsed=ToolCall::from_tool_name(
+        "prepare_orca_host_worker_continuation",args.clone()
+    ).unwrap();
+    assert!(matches!(parsed,ToolCall::PrepareOrcaHostWorkerContinuation{..}));
+    let mut bad=args;
+    bad["execute_shell"]=json!(true);
+    assert!(ToolCall::from_tool_name(
+        "prepare_orca_host_worker_continuation",bad
+    ).is_err());
+}

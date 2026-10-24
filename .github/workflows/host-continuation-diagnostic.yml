@@ -49,3 +49,5 @@ jobs:
         run: cargo test --locked -p webcodex orca_host_intent
       - name: Run Host one-call Job terminal registration and presentation tests
         run: cargo test --locked -p webcodex arm_and_present_job_terminal_continuation
+      - name: Run Host persisted Worker intent authorization tests
+        run: cargo test --locked -p webcodex prepare_orca_host_worker_continuation

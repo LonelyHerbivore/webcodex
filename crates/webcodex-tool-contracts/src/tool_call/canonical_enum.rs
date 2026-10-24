@@ -3108,6 +3108,24 @@ pub enum ToolCall {
         idempotency_key: String,
     },
 
+    /// Reserve a Host-owned durable, principal-scoped intent before launching
+    /// an Orca Worker. This step only persists an idempotency fence; no Worker
+    /// or Runner Job is started or authorized by the receipt.
+    PrepareOrcaHostWorkerContinuation {
+        #[schemars(regex(pattern = "^agent:[A-Za-z0-9_-]+:[A-Za-z0-9_-]+$"))]
+        project_id: String,
+        #[schemars(regex(pattern = "^run_[A-Za-z0-9_-]{1,123}$"))]
+        run_id: String,
+        #[schemars(regex(pattern = "^term_[A-Za-z0-9_-]{1,123}$"))]
+        coordinator_handle: String,
+        #[schemars(length(min = 8, max = 128))]
+        idempotency_key: String,
+        #[schemars(length(min = 1, max = 24))]
+        worker_agent: String,
+        #[schemars(length(min = 1, max = 4096))]
+        worker_spec: String,
+    },
+
     /// Read exact caller-owned durable Orca Host continuation identity.
     ReadOrcaHostIntent {
         #[schemars(length(min = 8, max = 128))]

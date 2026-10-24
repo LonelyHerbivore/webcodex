@@ -430,6 +430,11 @@ impl ToolCallAuditProjection for ToolCall {
             Self::ReadOrcaHostIntent { .. } => serde_json::json!({
                 "read_scope": "principal_owned_original_intent",
             }),
+            Self::PrepareOrcaHostWorkerContinuation { project_id, run_id, .. } => serde_json::json!({
+                "project_id": project_id,
+                "run_id": run_id,
+                "worker_spec": "sha256_only_in_host_store",
+            }),
             Self::PresentJobTerminalContinuation { wait_id }
             | Self::JobTerminalContinuationBind { wait_id, .. }
             | Self::JobTerminalContinuationState { wait_id, .. }

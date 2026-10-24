@@ -82,3 +82,108 @@ impl ToolRuntime {
         }
     }
 }
+
+impl ToolRuntime {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) async fn prepare_orca_host_worker_continuation(
+        &self,
+        project_id: String,
+        run_id: String,
+        coordinator_handle: String,
+        idempotency_key: String,
+        worker_agent: String,
+        worker_spec: String,
+        auth: Option<&AuthContext>,
+    ) -> ToolResult {
+        use crate::auth::{SCOPE_JOB_RUN, SCOPE_PLUGIN_INVOKE};
+        use sha2::{Digest, Sha256};
+        let Some(authority) = auth else {
+            return ToolResult::err_with_output(
+                "Authenticated Host owner required",
+                json!({"error_kind":"orca_host_intent_unauthorized"}),
+            );
+        };
+        let principal = principal_for_auth(auth);
+        if matches!(principal.kind.as_str(), "internal" | "bootstrap" | "open_anonymous"
+            | "managed_unowned") || !authority.has_scope(SCOPE_JOB_RUN)
+            || !authority.has_scope(SCOPE_PLUGIN_INVOKE)
+        {
+            return ToolResult::err_with_output(
+                "Host owner needs explicit Runner job and Plugin invoke scope",
+                json!({"error_kind":"orca_host_intent_unauthorized"}),
+            );
+        }
+        // This is a durable intent for a future *authorized* Worker action;
+        // no new execution permission is granted by a reserved record.
+        if !matches!(worker_agent.as_str(),
+            "codex" | "claude" | "claudecode" | "agy" | "dsh" | "antigravity")
+            || worker_spec.is_empty() || worker_spec.len()>4096
+            || worker_spec.chars().any(|c| c == '\0')
+            || !project_id.starts_with("agent:") || project_id.len()>256
+        {
+            return ToolResult::err_with_output(
+                "Bounded exact Worker intent required",
+                json!({"error_kind":"orca_host_intent_invalid"}),
+            );
+        }
+        let resolved = match self.resolve_project_input_for_auth(&project_id, auth).await {
+            Ok(project) if project.resolved_id == project_id => project,
+            _ => return ToolResult::err_with_output(
+                "Exact caller-authorized Runner Project could not be verified",
+                json!({"error_kind":"orca_host_intent_project_unauthorized"}),
+            ),
+        };
+        let access = crate::runner_http::runner_access_from_auth(auth);
+        if self.runner_registry.assert_runner_access(
+            access.as_ref(), &resolved.config.client_id).await.is_err() {
+            return ToolResult::err_with_output(
+                "Runner ownership could not be proven",
+                json!({"error_kind":"orca_host_intent_project_unauthorized"}),
+            );
+        }
+        let Some(db) = self.job_terminal_db.as_ref() else {
+            return ToolResult::err_with_output(
+                "Durable Host intent Store unavailable",
+                json!({"error_kind":"orca_host_intent_store_unavailable"}),
+            );
+        };
+        let mut digest=Sha256::new();
+        digest.update(b"webcodex.orca-host-worker-intent.v1");
+        for part in [
+            project_id.as_str(), run_id.as_str(),
+            coordinator_handle.as_str(), worker_agent.as_str(),
+            worker_spec.as_str(),
+        ] {
+            digest.update((part.len() as u64).to_be_bytes());
+            digest.update(part.as_bytes());
+        }
+        let spec_digest=format!("{:x}",digest.finalize());
+        let request=webcodex_store::NewOrcaHostIntent {
+            idempotency_key,
+            request_digest:spec_digest,
+            project_id,
+            run_id,
+            coordinator_handle,
+        };
+        match db.reserve_orca_host_intent(
+            &principal,&request,chrono::Utc::now().timestamp()
+        ) {
+            Ok(mutation)=>ToolResult::ok(json!({
+                "status":"original_host_intent_reserved",
+                "state":mutation.intent.state,
+                "replayed":mutation.replayed,
+                "project_id":mutation.intent.project_id,
+                "run_id":mutation.intent.run_id,
+                "coordinator_handle":mutation.intent.coordinator_handle,
+                "idempotency_key":mutation.intent.idempotency_key,
+                "worker_started":false,
+                "host_wake_verified":false,
+                "guidance":"Only durable Host authorization context was reserved. No Worker, Job or Wait was started or bound. Every later effect must move this original intent under Host ownership and must not repeat after uncertain outcome.",
+            })),
+            Err(error)=>ToolResult::err_with_output(
+                "Original Host Worker intent reservation refused",
+                json!({"error_kind":error.code}),
+            ),
+        }
+    }
+}

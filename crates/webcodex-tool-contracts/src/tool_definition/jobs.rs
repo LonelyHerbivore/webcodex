@@ -13,7 +13,7 @@ use crate::metadata::{
     ToolRisk::{JobRun, Read},
     JOB_RUN, RUNTIME_READ, TOOL_PROVIDER_NATIVE, TOOL_PROVIDER_RUNNER,
 };
-use webcodex_core::authority::SCOPE_JOB_DETACH;
+use webcodex_core::authority::{SCOPE_JOB_DETACH, SCOPE_PLUGIN_INVOKE};
 
 pub(super) const EXECUTION_DEFINITIONS: &[ToolDefinition] = &[
     require_all_scopes(
@@ -507,6 +507,38 @@ pub(super) const EXECUTION_DEFINITIONS: &[ToolDefinition] = &[
 ];
 
 pub(super) const LISTING_DEFINITIONS: &[ToolDefinition] = &[
+    require_all_scopes(
+        model_spec(
+            def(
+                "prepare_orca_host_worker_continuation",
+                super::ToolAuditPolicy::typed_fields(&[
+                    super::ToolAuditResultField::value("status"),
+                    super::ToolAuditResultField::value("state"),
+                    super::ToolAuditResultField::value("replayed"),
+                    super::ToolAuditResultField::value("error_kind"),
+                ]),
+                ModelVisible,
+                TOOL_CATEGORY_JOB,
+                None,
+                TOOL_PROVIDER_NATIVE,
+                super::ToolSemanticContract {
+                    effect: super::ToolEffect::Mutate,
+                    risk: Read,
+                    approval: super::ToolApprovalPolicy::None,
+                    idempotency: super::ToolIdempotency::Keyed,
+                },
+                Some(RUNTIME_READ),
+                false,
+                NoPath,
+                false,
+                false,
+                super::ToolSessionEvidencePolicy::NONE,
+            ),
+            "Reserve a private Host-owned Orca Worker continuation intent only after independently authorizing the exact Project, job:run and plugin:invoke scopes. Store only a bounded canonical request SHA256, never a raw worker prompt. Exact replay recovers the original state; a changed spec conflicts. This creates NO Worker, Runner Job, Wait or ChatGPT turn. An unknown external effect must always be reconciled before any later Worker start.",
+        ),
+        &[crate::metadata::JOB_RUN, SCOPE_PLUGIN_INVOKE],
+    ),
+
     model_spec(
         def(
             "arm_and_present_job_terminal_continuation",

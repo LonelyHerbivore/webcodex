@@ -114,6 +114,13 @@ impl ToolRuntime {
             ToolCall::ReadOrcaHostIntent { idempotency_key } => {
                 self.read_orca_host_intent_for_auth(&idempotency_key, auth)
             }
+            ToolCall::PrepareOrcaHostWorkerContinuation {
+                project_id, run_id, coordinator_handle, idempotency_key,
+                worker_agent, worker_spec
+            } => self.prepare_orca_host_worker_continuation(
+                project_id, run_id, coordinator_handle, idempotency_key,
+                worker_agent, worker_spec, auth
+            ).await,
             ToolCall::ArmAndPresentJobTerminalContinuation { job_id, idempotency_key } => {
                 self.arm_and_present_job_terminal_continuation(job_id, idempotency_key, auth).await
             }

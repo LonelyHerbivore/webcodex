@@ -566,6 +566,7 @@ impl ToolCall {
             Self::WaitForJobTerminal { .. } => "wait_for_job_terminal",
             Self::ArmAndPresentJobTerminalContinuation { .. } => "arm_and_present_job_terminal_continuation",
             Self::ReadOrcaHostIntent { .. } => "read_orca_host_intent",
+            Self::PrepareOrcaHostWorkerContinuation { .. } => "prepare_orca_host_worker_continuation",
             Self::PresentJobTerminalContinuation { .. } => "present_job_terminal_continuation",
             Self::JobTerminalContinuationBind { .. } => "bind_job_terminal_continuation",
             Self::JobTerminalContinuationState { .. } => "get_job_terminal_continuation_state",
