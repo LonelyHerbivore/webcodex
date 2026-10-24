@@ -1129,6 +1129,7 @@ async fn register_orca_host_wait_and_present_uses_exact_prior_job_and_no_second_
     assert_eq!(first.output["state"],"registered");
     assert_eq!(first.output["job_id"],job_id);
     assert_eq!(first.output["host_wake_verified"],false);
+    assert_eq!(first.output["automatic_resume_available"],false);
     let saved=db.read_orca_host_intent(&principal,key).unwrap().unwrap();
     assert_eq!(saved.state,"registered");
     assert_eq!(saved.wait_id.as_deref(),first.output["wait_id"].as_str());
@@ -1137,6 +1138,7 @@ async fn register_orca_host_wait_and_present_uses_exact_prior_job_and_no_second_
     assert!(replay.success,"{:?}",replay.error);
     assert_eq!(replay.output["status"],"original_host_wait_recovered");
     assert_eq!(replay.output["wait_id"],first.output["wait_id"]);
+    assert_eq!(replay.output["automatic_resume_available"],false);
     complete_job(&runtime,"host-wait-project",&request,Some(1)).await;
     let terminal=db.read_job_terminal_wait(
         &principal,first.output["wait_id"].as_str().unwrap(),
@@ -1226,6 +1228,7 @@ async fn register_orca_host_wait_and_present_reports_already_terminal_without_ca
     assert!(result.success,"{:?} {:?}",result.error,result.output);
     assert_eq!(result.output["presentation_state"],"already_terminal_handle_now");
     assert_eq!(result.output["wait_state"],"triggered");
+    assert_eq!(result.output["automatic_resume_available"],false);
     assert_eq!(result.output["host_wake_verified"],false);
     assert!(result.output.get("job_terminal_continuation").is_none());
     let saved=db.read_orca_host_intent(&principal,key).unwrap().unwrap();
