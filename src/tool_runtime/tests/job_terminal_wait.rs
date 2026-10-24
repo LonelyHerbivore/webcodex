@@ -1194,3 +1194,48 @@ fn start_orca_worker_with_continuation_rejects_extra_arbitrary_executable(){
     bad["executable"]=json!("powershell");
     assert!(ToolCall::from_tool_name("start_orca_worker_with_continuation",bad).is_err());
 }
+#[tokio::test]
+async fn register_orca_host_wait_and_present_reports_already_terminal_without_card() {
+    let (_temp,runtime,db)=attention_runtime().await;
+    let owner=shared_key_auth_context(&"b".repeat(64));
+    let key="original_orca_wait_terminal_race";
+    let principal=principal_for_auth(Some(&owner));
+    let (job_id,request)=start_owned_job(
+        &runtime,"host-wait-fast","orch-fast",&owner).await;
+    // Worker finished before Host was able to arm the terminal attention.
+    complete_job(&runtime,"host-wait-fast",&request,Some(1)).await;
+    db.reserve_orca_host_intent(&principal,&webcodex_store::NewOrcaHostIntent{
+        idempotency_key:key.to_owned(),request_digest:"b".repeat(64),
+        project_id:"agent:host-wait-fast:orch-fast".to_owned(),
+        run_id:"run_fast".to_owned(),
+        coordinator_handle:"term_fast".to_owned(),
+    },1000).unwrap();
+    db.transition_orca_host_intent(&principal,key,"reserved",
+        "worker_start_dispatched",None,None,None,None,1001).unwrap();
+    db.transition_orca_host_intent(&principal,key,"worker_start_dispatched",
+        "worker_start_confirmed",Some(("ctx_fast","task_fast")),None,None,None,1002).unwrap();
+    db.transition_orca_host_intent(&principal,key,"worker_start_confirmed",
+        "watch_start_dispatched",None,None,None,None,1003).unwrap();
+    let (watch,_,_)=super::super::orca_host_watcher_job::first_watch_identity(
+        "run_fast","ctx_fast","task_fast");
+    db.transition_orca_host_intent(&principal,key,"watch_start_dispatched",
+        "watch_job_confirmed",None,Some(&watch),Some(&job_id),
+        None,1004).unwrap();
+    let result=runtime.register_orca_host_wait_and_present(
+        key.to_owned(),Some(&owner)).await;
+    assert!(result.success,"{:?} {:?}",result.error,result.output);
+    assert_eq!(result.output["presentation_state"],"already_terminal_handle_now");
+    assert_eq!(result.output["wait_state"],"triggered");
+    assert_eq!(result.output["host_wake_verified"],false);
+    assert!(result.output.get("job_terminal_continuation").is_none());
+    let saved=db.read_orca_host_intent(&principal,key).unwrap().unwrap();
+    assert_eq!(saved.state,"registered");
+    let wait_id=result.output["wait_id"].as_str().unwrap();
+    let wait=db.read_job_terminal_wait(
+        &principal,wait_id,chrono::Utc::now().timestamp()).unwrap();
+    assert_eq!(wait.state,JobTerminalWaitState::Triggered);
+    let replay=runtime.register_orca_host_wait_and_present(
+        key.to_owned(),Some(&owner)).await;
+    assert!(replay.success);
+    assert_eq!(replay.output["wait_id"],wait_id);
+}
