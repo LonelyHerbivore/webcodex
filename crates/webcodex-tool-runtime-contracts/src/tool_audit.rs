@@ -438,6 +438,11 @@ impl ToolCallAuditProjection for ToolCall {
                 "source":"principal_owned_confirmed_watcher_job",
                 "intent":"durable_host_attention",
             }),
+            Self::StartOrcaWorkerWithContinuation { project_id,run_id,.. } => serde_json::json!({
+                "project_id":project_id,"run_id":run_id,
+                "workflow":"first_party_cas_worker_watcher_wait",
+                "worker_spec":"sha256_only_in_host_store",
+            }),
             Self::PrepareOrcaHostWorkerContinuation { project_id, run_id, .. }
             | Self::StartOrcaWorkerWithHostIntent { project_id, run_id, .. } => serde_json::json!({
                 "project_id": project_id,

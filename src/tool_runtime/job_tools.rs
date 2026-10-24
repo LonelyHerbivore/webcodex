@@ -130,6 +130,14 @@ impl ToolRuntime {
                 worker_agent, worktree, worker_spec, plugin_binding,
                 auth, transport
             ).await,
+            ToolCall::StartOrcaWorkerWithContinuation {
+                project_id, run_id, coordinator_handle, idempotency_key,
+                worker_agent, worktree, worker_spec, plugin_binding,
+            } => self.start_orca_worker_with_continuation(
+                project_id, run_id, coordinator_handle, idempotency_key,
+                worker_agent, worktree, worker_spec, plugin_binding,
+                auth, transport
+            ).await,
             ToolCall::RegisterOrcaHostWaitAndPresent { idempotency_key } => {
                 self.register_orca_host_wait_and_present(idempotency_key, auth).await
             }

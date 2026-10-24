@@ -570,6 +570,7 @@ impl ToolCall {
             Self::StartOrcaWorkerWithHostIntent { .. } => "start_orca_worker_with_host_intent",
             Self::StartOrcaHostWatcherJob { .. } => "start_orca_host_watcher_job",
             Self::RegisterOrcaHostWaitAndPresent { .. } => "register_orca_host_wait_and_present",
+            Self::StartOrcaWorkerWithContinuation { .. } => "start_orca_worker_with_continuation",
             Self::PresentJobTerminalContinuation { .. } => "present_job_terminal_continuation",
             Self::JobTerminalContinuationBind { .. } => "bind_job_terminal_continuation",
             Self::JobTerminalContinuationState { .. } => "get_job_terminal_continuation_state",

@@ -212,7 +212,7 @@ pub(crate) fn is_exact_orca_worker_start_binding(
         return false;
     };
     observed.provider_id == "orca"
-        && observed.tool_name == "orca_start_worker"
+        && observed.tool_name == "orca_start_worker_host_bound"
         && observed.client_id == runner_client_id
         && observed
             .project
@@ -1382,7 +1382,7 @@ mod tests {
     fn orca_worker_start_binding_requires_exact_provider_tool_runner_and_bound_project() {
         let runtime=ToolRuntime::new_for_tests();
         let project="agent:runner-a:project-a";
-        let mut valid=test_binding("orca","orca_start_worker");
+        let mut valid=test_binding("orca","orca_start_worker_host_bound");
         valid.project=Some(BoundPluginProject{
             canonical_id:project.to_owned(),
             target:PluginProjectTarget{
@@ -1403,6 +1403,10 @@ mod tests {
         wrong_provider.provider_id="untrusted".to_owned();
         assert!(!is_exact_orca_worker_start_binding(&runtime,
             &runtime.plugin_gateway.remember(wrong_provider),project,"runner-a"));
+        let mut legacy_unbound=valid.clone();
+        legacy_unbound.tool_name="orca_start_worker".to_owned();
+        assert!(!is_exact_orca_worker_start_binding(&runtime,
+            &runtime.plugin_gateway.remember(legacy_unbound),project,"runner-a"));
         let mut wrong_tool=valid;
         wrong_tool.tool_name="orca_host_continuation_plan".to_owned();
         assert!(!is_exact_orca_worker_start_binding(&runtime,

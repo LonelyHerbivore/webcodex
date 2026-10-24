@@ -510,6 +510,31 @@ pub(super) const LISTING_DEFINITIONS: &[ToolDefinition] = &[
     require_all_scopes(
         model_spec(
             def(
+                "start_orca_worker_with_continuation",
+                super::ToolAuditPolicy::typed_fields(&[
+                    super::ToolAuditResultField::value("status"),
+                    super::ToolAuditResultField::value("phase"),
+                    super::ToolAuditResultField::value("error_kind"),
+                ]),
+                ModelVisible, TOOL_CATEGORY_JOB,
+                Some(super::RunnerCapabilityRequirement::DetachedProcess),
+                TOOL_PROVIDER_NATIVE,
+                super::ToolSemanticContract {
+                    effect: super::ToolEffect::Execute,risk:JobRun,
+                    approval: super::ToolApprovalPolicy::Standard,
+                    idempotency: super::ToolIdempotency::Keyed,
+                },
+                Some(JOB_RUN),false,NoPath,false,true,
+                super::ToolSessionEvidencePolicy::NONE,
+            ),
+            "Authorized one-call Host orchestration: preflight exact Orca Plugin binding and Runner detached watcher capability; durably reserve and start one Orca Worker through standard Plugin Gateway; launch one first-party bundled watcher with original Runner Job ID; register and present one Host Wait. Each external effect has its own prior durable CAS. Failure/uncertain/replay NEVER starts a second Worker, Job or Wait. A registered Host carrier can offer a continuation card, but CI or a delivered card is NOT proof a later GPT turn resumed.",
+        ),
+        &[JOB_RUN,SCOPE_JOB_DETACH,SCOPE_PLUGIN_INVOKE,crate::metadata::PROJECT_WRITE],
+    ),
+
+    require_all_scopes(
+        model_spec(
+            def(
                 "register_orca_host_wait_and_present",
                 super::ToolAuditPolicy::typed_fields(&[
                     super::ToolAuditResultField::value("status"),

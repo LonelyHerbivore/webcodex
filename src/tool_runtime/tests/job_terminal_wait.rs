@@ -1152,3 +1152,45 @@ fn register_orca_host_wait_and_present_rejects_injected_job_selector() {
     bad["job_id"]=json!("wc_job_foreign");
     assert!(ToolCall::from_tool_name("register_orca_host_wait_and_present",bad).is_err());
 }
+
+#[tokio::test]
+async fn start_orca_worker_with_continuation_preflights_detached_authority_before_any_effect(){
+    let (_tmp,runtime,db)=attention_runtime().await;
+    let mut owner=shared_key_auth_context(&"a".repeat(64));
+    owner.scopes.push(crate::auth::SCOPE_PLUGIN_INVOKE.to_owned());
+    let key="orca_full_workflow_preflight_123";
+    let make=||ToolCall::StartOrcaWorkerWithContinuation{
+        project_id:"agent:missing-runner:missing-project".to_string(),
+        run_id:"run_full".to_string(),
+        coordinator_handle:"term_full".to_string(),
+        idempotency_key:key.to_string(),
+        worker_agent:"codex".to_string(),
+        worktree:"test-worktree".to_string(),
+        worker_spec:"Test only".to_string(),
+        plugin_binding:"wc_pbind_aaaaaaaaaaaaaaaaaaaaaA".to_string(),
+    };
+    let missing=runtime.dispatch_with_auth(make(),Some(&owner)).await;
+    assert!(!missing.success);
+    let principal=principal_for_auth(Some(&owner));
+    assert!(db.read_orca_host_intent(&principal,key).unwrap().is_none());
+    owner.scopes.push(crate::auth::SCOPE_JOB_DETACH.to_owned());
+    let unowned=runtime.dispatch_with_auth(make(),Some(&owner)).await;
+    assert!(!unowned.success);
+    assert!(db.read_orca_host_intent(&principal,key).unwrap().is_none());
+}
+#[test]
+fn start_orca_worker_with_continuation_rejects_extra_arbitrary_executable(){
+    let args=json!({
+        "project_id":"agent:runner:project","run_id":"run_demo",
+        "coordinator_handle":"term_owned",
+        "idempotency_key":"orca_full_workflow_preflight_123",
+        "worker_agent":"codex","worktree":"worktree","worker_spec":"Test only",
+        "plugin_binding":"wc_pbind_aaaaaaaaaaaaaaaaaaaaaA"
+    });
+    assert!(matches!(ToolCall::from_tool_name(
+        "start_orca_worker_with_continuation",args.clone()).unwrap(),
+        ToolCall::StartOrcaWorkerWithContinuation{..}));
+    let mut bad=args;
+    bad["executable"]=json!("powershell");
+    assert!(ToolCall::from_tool_name("start_orca_worker_with_continuation",bad).is_err());
+}

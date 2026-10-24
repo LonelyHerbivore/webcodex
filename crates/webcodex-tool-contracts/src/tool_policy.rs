@@ -420,6 +420,7 @@ pub fn runtime_tool_supports_passive_job_attention(name: &str) -> bool {
                 | "start_orca_worker_with_host_intent"
                 | "start_orca_host_watcher_job"
                 | "register_orca_host_wait_and_present"
+                | "start_orca_worker_with_continuation"
                 | "present_job_terminal_continuation"
         )
 }

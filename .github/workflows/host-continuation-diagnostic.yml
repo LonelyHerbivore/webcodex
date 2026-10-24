@@ -65,3 +65,5 @@ jobs:
         run: node --test scripts/orca_host_watcher_contract.test.mjs
       - name: Verify original Host watcher Wait register, present and replay
         run: cargo test --locked -p webcodex register_orca_host_wait_and_present
+      - name: Verify full Host Worker to watcher to Wait composition preflight
+        run: cargo test --locked -p webcodex start_orca_worker_with_continuation

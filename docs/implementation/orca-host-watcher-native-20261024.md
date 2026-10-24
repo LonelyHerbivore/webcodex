@@ -17,3 +17,27 @@ All uncertain external-effect phases reject automatic re-execution and require i
 ## Acceptance status
 
 The GitHub CI workflow compiles Rust Host/Store, runs durable Store, Worker, Job, Wait and binding tests, and executes Node watcher fixtures. This is diagnostic code: no production Host or Tunnel deployment and no claim of an unattended ChatGPT model turn. Final acceptance must use a separately authorized real Orca Runner and Host continuation.
+
+
+Compatibility update: The Native Plugin adds an opt-in orca_start_worker_host_bound tool with projectBound=true while retaining the legacy orca_start_worker unchanged. Host exact binding accepts only the bound alias. No old manual Plugin client is required to supply a new Project field.
+
+## New single-call Host orchestration
+
+start_orca_worker_with_continuation requires the new opt-in Native Plugin alias
+orca_start_worker_host_bound with projectBound=true. It first verifies the
+exact Runner/Project and detached-process capability, plus job:run,
+job:detach, project:write and plugin:invoke. Only then does it call the
+existing Host crash-fenced Worker start, bundled watcher admission, and
+original Host Wait registration functions sequentially. After each step it
+requires the newly confirmed stage, rather than accepting a replayed or
+uncertain result as a new effect. Partial errors retain the proven
+Dispatch/Task/Job/Wait references for manual reconciliation.
+
+The old unbound orca_start_worker is retained for legacy callers and
+is rejected by the new Host composite binding check. F-drive Native Plugin
+alpha.17 was tested against actual WebCodex Runner metadata: the bound
+alias requires a Project on describe, while legacy caller semantics remain.
+
+This single tool provides only an orchestrated authorized registration in
+the invoking model turn. The Host must separately validate an ACTUAL
+subsequent ChatGPT model turn to claim successful unattended wake.
