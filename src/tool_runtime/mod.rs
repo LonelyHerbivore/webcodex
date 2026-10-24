@@ -64,6 +64,7 @@ pub(crate) mod job_audit;
 mod job_input;
 mod job_query;
 mod job_terminal_wait;
+mod orca_host_intent_tool;
 mod job_tools;
 mod jobs;
 pub(crate) mod kernel;

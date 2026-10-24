@@ -766,3 +766,64 @@ async fn readiness_mixed_visibility_hides_the_whole_set_even_if_visible_job_is_t
         }
     }
 }
+#[tokio::test]
+async fn orca_host_intent_recovery_tool_is_owner_scoped_and_read_only() {
+    let (_temp, runtime, db) = attention_runtime().await;
+    let owner = shared_key_auth_context(&"c".repeat(64));
+    let foreign = shared_key_auth_context(&"d".repeat(64));
+    let key = "original_orca_intent_test_1234";
+    let principal = principal_for_auth(Some(&owner));
+    let reservation = db
+        .reserve_orca_host_intent(
+            &principal,
+            &webcodex_store::NewOrcaHostIntent {
+                idempotency_key: key.to_owned(),
+                request_digest: "a".repeat(64),
+                project_id: "agent:laptop-id:isolated-project".to_owned(),
+                run_id: "run_original".to_owned(),
+                coordinator_handle: "term_original".to_owned(),
+            },
+            1000,
+        )
+        .unwrap();
+    assert!(!reservation.replayed);
+
+    let exact = ToolCall::ReadOrcaHostIntent {
+        idempotency_key: key.to_owned(),
+    };
+    let read = runtime.dispatch_with_auth(exact.clone(), Some(&owner)).await;
+    assert!(read.success, "{:?}", read.error);
+    assert_eq!(read.output["status"], "recorded");
+    assert_eq!(read.output["state"], "reserved");
+    assert_eq!(read.output["project_id"], "agent:laptop-id:isolated-project");
+    assert_eq!(read.output["requires_reconciliation"], true);
+    assert_eq!(read.output["host_wake_verified"], false);
+    let foreign_read = runtime.dispatch_with_auth(exact.clone(), Some(&foreign)).await;
+    assert!(foreign_read.success, "{:?}", foreign_read.error);
+    assert_eq!(foreign_read.output["status"], "unrecorded");
+    assert_eq!(foreign_read.output["job_id"], serde_json::Value::Null);
+    let unauthorized = runtime.dispatch_with_auth(exact, None).await;
+    assert!(!unauthorized.success);
+    let still_original = db
+        .read_orca_host_intent(&principal, key)
+        .unwrap()
+        .unwrap();
+    assert_eq!(still_original.state, "reserved");
+    assert!(still_original.job_id.is_none());
+}
+
+#[test]
+fn read_orca_host_intent_accepts_only_bounded_canonical_tool_arguments() {
+    use serde_json::json;
+    let call = ToolCall::from_tool_name(
+        "read_orca_host_intent",
+        json!({"idempotency_key":"original_orca_intent_test_1234"}),
+    )
+    .unwrap();
+    assert!(matches!(call, ToolCall::ReadOrcaHostIntent { .. }));
+    assert!(ToolCall::from_tool_name(
+        "read_orca_host_intent",
+        json!({"idempotency_key":"original_orca_intent_test_1234","project":"injected"}),
+    )
+    .is_err());
+}

@@ -3100,6 +3100,12 @@ pub enum ToolCall {
         idempotency_key: String,
     },
 
+    /// Read exact caller-owned durable Orca Host continuation identity.
+    ReadOrcaHostIntent {
+        #[schemars(length(min = 8, max = 128))]
+        idempotency_key: String,
+    },
+
     /// Present one exact caller-owned Job terminal continuation App card.
     PresentJobTerminalContinuation {
         #[schemars(regex(pattern = "^wc_job_wait_[A-Za-z0-9_-]{16}$"))]

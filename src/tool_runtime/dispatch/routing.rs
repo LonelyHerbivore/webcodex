@@ -344,6 +344,7 @@ impl ToolRuntime {
             | ToolCall::ObserveJobs { .. }
             | ToolCall::WaitForJobReadiness { .. }
             | ToolCall::WaitForJobTerminal { .. }
+            | ToolCall::ReadOrcaHostIntent { .. }
             | ToolCall::ListJobs { .. }
             | ToolCall::JobTail { .. }) => {
                 self.dispatch_job_tool(call, auth, ssh_resource, correlation)

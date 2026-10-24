@@ -45,3 +45,5 @@ jobs:
         run: cargo test --locked -p webcodex-store job_terminal_wait
       - name: Run Orca Host intent store tests
         run: cargo test --locked -p webcodex-store orca_host_intent
+      - name: Run Orca Host authorized recovery tool tests
+        run: cargo test --locked -p webcodex orca_host_intent

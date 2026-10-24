@@ -507,6 +507,33 @@ pub(super) const EXECUTION_DEFINITIONS: &[ToolDefinition] = &[
 ];
 
 pub(super) const LISTING_DEFINITIONS: &[ToolDefinition] = &[
+    model_spec(
+        def(
+            "read_orca_host_intent",
+            super::ToolAuditPolicy::typed_fields(&[
+                super::ToolAuditResultField::value("status"),
+                super::ToolAuditResultField::value("state"),
+                super::ToolAuditResultField::value("error_kind"),
+            ]),
+            ModelVisible,
+            TOOL_CATEGORY_JOB,
+            None,
+            TOOL_PROVIDER_NATIVE,
+            super::ToolSemanticContract {
+                effect: super::ToolEffect::Observe,
+                risk: Read,
+                approval: super::ToolApprovalPolicy::None,
+                idempotency: super::ToolIdempotency::PureRead,
+            },
+            Some(RUNTIME_READ),
+            false,
+            NoPath,
+            false,
+            false,
+            super::ToolSessionEvidencePolicy::NONE,
+        ),
+        "Read a caller-owned durable Orca Host intent after a model-turn or transport interruption. Requires an authenticated owner and exact idempotency_key. Absent records do not prove that no Worker or Job was started. In-flight effects require reconciliation, never a new Worker, Job or Wait. Does not arm a Wait or wake ChatGPT.",
+    ),
     adaptive_runtime_direct(model_spec(
         def(
             "list_jobs",
