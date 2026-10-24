@@ -55,3 +55,5 @@ jobs:
         run: cargo test --locked -p webcodex start_orca_worker_with_host_intent
       - name: Run Host Orca result identity validator
         run: cargo test --locked -p webcodex confirmed_native_orca_worker_result
+      - name: Run exact Orca start Plugin binding isolation tests
+        run: cargo test --locked -p webcodex orca_worker_start_binding

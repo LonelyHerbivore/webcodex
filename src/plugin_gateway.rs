@@ -1377,6 +1377,38 @@ mod tests {
         }
     }
 
+
+    #[test]
+    fn orca_worker_start_binding_requires_exact_provider_tool_runner_and_bound_project() {
+        let runtime=ToolRuntime::new_for_tests();
+        let project="agent:runner-a:project-a";
+        let mut valid=test_binding("orca","orca_start_worker");
+        valid.project=Some(BoundPluginProject{
+            canonical_id:project.to_owned(),
+            target:PluginProjectTarget{
+                project_id:"project-a".to_owned(),
+                root_fingerprint:"root-fingerprint-a".to_owned(),
+            },
+        });
+        let accepted=runtime.plugin_gateway.remember(valid.clone());
+        assert!(is_exact_orca_worker_start_binding(&runtime,&accepted,project,"runner-a"));
+        assert!(!is_exact_orca_worker_start_binding(&runtime,&accepted,project,"runner-b"));
+        assert!(!is_exact_orca_worker_start_binding(&runtime,&accepted,
+            "agent:runner-a:project-other","runner-a"));
+        let mut unbound=valid.clone();
+        unbound.project=None;
+        assert!(!is_exact_orca_worker_start_binding(&runtime,
+            &runtime.plugin_gateway.remember(unbound),project,"runner-a"));
+        let mut wrong_provider=valid.clone();
+        wrong_provider.provider_id="untrusted".to_owned();
+        assert!(!is_exact_orca_worker_start_binding(&runtime,
+            &runtime.plugin_gateway.remember(wrong_provider),project,"runner-a"));
+        let mut wrong_tool=valid;
+        wrong_tool.tool_name="orca_host_continuation_plan".to_owned();
+        assert!(!is_exact_orca_worker_start_binding(&runtime,
+            &runtime.plugin_gateway.remember(wrong_tool),project,"runner-a"));
+    }
+
     #[test]
     fn project_delegation_preserves_native_schema_and_separates_trusted_target() {
         let native =
