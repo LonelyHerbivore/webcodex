@@ -6,6 +6,11 @@ use crate::auth::{AuthContext,SCOPE_JOB_RUN,SCOPE_PROJECT_WRITE,SCOPE_PLUGIN_INV
 use crate::runner_http::RunnerFeature;
 use serde_json::json;
 use webcodex_core::authority::SCOPE_JOB_DETACH;
+use crate::job_terminal_attention::principal_for_auth;
+
+fn managed_orca_host_owner(kind: &str) -> bool {
+    !matches!(kind, "internal" | "bootstrap" | "managed_unowned" | "open_anonymous")
+}
 
 impl ToolRuntime {
     #[allow(clippy::too_many_arguments)]
@@ -25,6 +30,24 @@ impl ToolRuntime {
             .iter().all(|scope|owner.has_scope(scope)){
             return ToolResult::err_with_output("Full Worker/Job/Plugin scope set missing",
                 json!({"error_kind":"orca_host_composite_unauthorized"}))
+        }
+        // The outer tool authority (e.g. trusted_agent) is not by itself a
+        // durable principal. The exact downstream Host Intent store rejects
+        // unmanaged/anonymous owner kinds. Preflight here BEFORE reserving or
+        // dispatching any Worker; never misreport this as OutcomeUnknown.
+        let principal=principal_for_auth(auth);
+        if !managed_orca_host_owner(&principal.kind) {
+            return ToolResult::err_with_output(
+                "A managed Host owner is required for Orca continuation",
+                json!({
+                    "status":"orca_host_composite_preflight_denied",
+                    "phase":"authorization",
+                    "error_kind":"orca_host_composite_managed_owner_required",
+                    "worker_started":false,
+                    "host_wake_verified":false,
+                    "guidance":"Use the supported managed Host account authority. No Worker/Job/Wait was dispatched; do not bypass identity enforcement."
+                })
+            )
         }
         let project=match self.resolve_project_input_for_auth(&project_id,auth).await{
             Ok(project) if project.resolved_id==project_id=>project,
@@ -116,5 +139,19 @@ impl ToolRuntime {
             "host_wake_verified":false,
             "guidance":"Worker, first-party watcher and Wait registration are stored. The authorized Host offered a continuation; a later GPT turn must be verified independently."
         }))
+    }
+}
+
+#[cfg(test)]
+mod managed_owner_tests {
+    use super::managed_orca_host_owner;
+    #[test]
+    fn reject_unmanaged_host_owner_before_any_worker_dispatch() {
+        for kind in ["internal", "bootstrap", "managed_unowned", "open_anonymous"] {
+            assert!(!managed_orca_host_owner(kind), "{kind}");
+        }
+        for kind in ["shared_key", "authenticated_user"] {
+            assert!(managed_orca_host_owner(kind), "{kind}");
+        }
     }
 }
