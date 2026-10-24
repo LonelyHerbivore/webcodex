@@ -78,3 +78,22 @@ CI remain insufficient evidence of a new ChatGPT model turn. The combined
 tool also reports no_proven_unattended_carrier when capability cannot be
 established. host_wake_verified remains false until an independently observed
 future turn.
+
+
+## Verified Orca CLI read-only stable-pane compatibility
+
+A live read-only inspection in dsh-image-user-question confirmed that
+orchestration run-current --from term_* and orchestration check
+--terminal term_* --peek return stable_pane_required from ordinary Git Bash.
+A detached Runner Job cannot assume it owns a stable Orca terminal.
+
+The first-party watcher now uses orchestration run-show --id run_* and
+orchestration inbox --terminal run:run_* --limit 100 instead, both observed
+working from a non-Orca-shell process. It independently validates the
+Coordinator binding and each message's Run/recipient/Worker provenance.
+The inbox API returns both read and unread messages: the watcher considers
+only unread read=0 rows and never ACKs. It rejects unknown read state and
+a saturated 100-row window rather than silently omitting older messages.
+Live read-only worker-show succeeded for two already-terminal Workers; no
+new Worker or message was created. The final unattended ChatGPT continuation
+still needs a real connected Host carrier and an actual new model turn.
