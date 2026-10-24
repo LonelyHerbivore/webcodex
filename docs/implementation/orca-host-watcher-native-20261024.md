@@ -97,3 +97,36 @@ a saturated 100-row window rather than silently omitting older messages.
 Live read-only worker-show succeeded for two already-terminal Workers; no
 new Worker or message was created. The final unattended ChatGPT continuation
 still needs a real connected Host carrier and an actual new model turn.
+
+## Live isolated Test Tunnel owner admission (2026-10-24)
+
+A distinct diagnostic Host/Runner/Test Tunnel from commit 2d72924 was launched
+on loopback 127.0.0.1:18086 with the native Orca Plugin alpha.17 copied into
+test-only storage and the single Runner project mapped to dsh-image-user-question.
+The independently connected ChatGPT Test app confirmed the **exact source
+commit**, one online Runner/project, and plugin status Ready with 40 tools.
+An exact Project-bound orca_start_worker_host_bound describe returned a valid
+binding. Production Host, Runner, Tunnel and F: Plugin were untouched.
+
+One authorized-looking Host composite call was attempted with a new unique
+idempotency key, current Orca Run and a **read-only** Codex worker specification.
+The composite returned worker_start_dispatched_or_existing, while
+read_orca_host_intent returned orca_host_intent_unauthorized. Independent
+read-only Orca task-list/worker-list showed **only the prior two completed
+Tasks/Dispatches**: no new worker was observed. No duplicate dispatch was
+attempted. The tested Connector's trusted_agent runtime policy did not imply
+an acceptable managed Host Intent principal: the inner store correctly
+denied the caller. This exposed an error-reporting gap in the composite.
+
+The revised composite explicitly preflights the managed owner kind before
+any Project, Plugin or Worker action, and returns
+orca_host_composite_preflight_denied with worker_started=false and
+host_wake_verified=false. It NEVER weakens the original Host authorization.
+A Test app with supported authenticated managed owner identity is required
+before the real Worker/Job/Wait and independent new GPT-turn gate can proceed.
+
+The interactive Test lifecycle was closed by sending an explicit EOF to
+the single owned Job. WebCodex CLI, Runner and Server all exited code 0;
+the Test Tunnel lock became absent and profile remains disabled. The
+existing dsh-image-user-question Git status retains its pre-existing
+screenshots.json deletion; it was not altered by this test.
