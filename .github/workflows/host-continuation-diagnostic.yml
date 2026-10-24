@@ -69,6 +69,8 @@ jobs:
         run: cargo test --locked -p webcodex register_orca_host_wait_and_present
       - name: Verify full Host Worker to watcher to Wait composition preflight
         run: cargo test --locked -p webcodex start_orca_worker_with_continuation
+      - name: Deny unmanaged owners before Orca Worker external dispatch
+        run: cargo test --locked -p webcodex reject_unmanaged_host_owner_before_any_worker_dispatch
 
   windows-host-build:
     name: Windows Host/CLI/Runner trio and first-party watcher
