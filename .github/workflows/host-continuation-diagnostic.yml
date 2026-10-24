@@ -116,7 +116,7 @@ jobs:
             $offset = [BitConverter]::ToInt32($bytes, 0x3c)
             if ($offset -lt 64 -or $offset -gt ($bytes.Length - 6)) { throw "$name has invalid PE offset" }
             $machine = [BitConverter]::ToUInt16($bytes, $offset + 4)
-            if ($machine -ne 0x8664) { throw "$name: expected Windows x64 PE, got $machine" }
+            if ($machine -ne 0x8664) { throw "${name}: expected Windows x64 PE, got $machine" }
             & $exe --version
             if ($LASTEXITCODE -ne 0) { throw "$name --version failed" }
           }
