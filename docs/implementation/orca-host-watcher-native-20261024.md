@@ -41,3 +41,13 @@ alias requires a Project on describe, while legacy caller semantics remain.
 This single tool provides only an orchestrated authorized registration in
 the invoking model turn. The Host must separately validate an ACTUAL
 subsequent ChatGPT model turn to claim successful unattended wake.
+
+## Isolated Windows build gate
+
+The diagnostic GitHub workflow adds a Windows Server 2022 x64 compilation job for
+webcodex-server.exe. It verifies the native Rust target, GitHub checkout SHA,
+Windows PE machine type, binary --version, and first-party watcher Node fixture.
+An artifact is uploaded for five days with an exact SHA-256 manifest and a
+diagnostic-only warning. This is NOT a signed release or a production update;
+never replace the active WebCodex Server/Tunnel using this build without
+separate operator authorization and isolated end-to-end acceptance.
