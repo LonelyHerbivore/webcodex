@@ -459,6 +459,9 @@ impl Database {
         // Generic Job terminal attention has its own authority model and bounded
         // one-shot store; it deliberately does not reuse Durable Agent waits.
         Self::ensure_job_terminal_wait_schema(&mut conn)?;
+        // Orca Host composite intents are durable, principal-scoped effect
+        // fences, independent from the actual Runner Job and terminal Wait.
+        Self::ensure_orca_host_intent_schema(&mut conn)?;
 
         // Agent Wake is the shared durable continuation/outbox domain. Initialize it
         // after AgentTask and AgentWait so every source foreign key is enforceable.

@@ -42,4 +42,5 @@ jobs:
       - name: Check WebCodex Host and Store
         run: cargo check --locked -p webcodex -p webcodex-store --all-targets
       - name: Run Store Job terminal tests
-        run: cargo test --locked -p webcodex-store job_terminal_wait
+        run: cargo test --locked -p webcodex-store job_terminal_wait      - name: Run Orca Host intent store tests
+        run: cargo test --locked -p webcodex-store orca_host_intent

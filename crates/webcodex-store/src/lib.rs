@@ -42,6 +42,9 @@ mod goal_plan_tests;
 mod goal_stall;
 mod job_receipts;
 mod job_terminal_wait;
+mod orca_host_intent;
+#[cfg(test)]
+mod orca_host_intent_tests;
 #[cfg(test)]
 mod job_terminal_wait_tests;
 mod memory;
@@ -128,6 +131,10 @@ pub use self::job_terminal_wait::{
     JobTerminalWaitStoreError, NewJobTerminalWait, JOB_TERMINAL_DELIVERY_ATTEMPT_ID_PREFIX,
     JOB_TERMINAL_WAIT_ID_PREFIX, MAX_JOB_TERMINAL_WAITS_GLOBAL,
     MAX_JOB_TERMINAL_WAITS_PER_PRINCIPAL, MAX_JOB_TERMINAL_WAITS_PER_SOURCE,
+};
+pub use self::orca_host_intent::{
+    NewOrcaHostIntent, OrcaHostIntentError, OrcaHostIntentMutation, OrcaHostIntentRecord,
+    MAX_ORCA_HOST_INTENTS_GLOBAL, MAX_ORCA_HOST_INTENTS_PER_PRINCIPAL,
 };
 #[allow(unused_imports)]
 pub use self::memory::{
