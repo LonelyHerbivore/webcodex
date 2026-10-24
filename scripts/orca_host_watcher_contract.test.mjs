@@ -13,17 +13,32 @@ const args=process.argv.slice(2);
 const check=(key)=>args.includes(key);
 const mode=process.env.TEST_ORCA_WATCH_MODE;
 let data;
-if(check('run-current')){
+if(check('run-show')){
   data={run:{id:mode==='bad_coordinator'?'run_other':'run_test1',coordinator_handle:'term_coordinator'}};
 }else if(check('worker-show')){
+  const finished=mode==='done';
   data={dispatch:{id:'ctx_worker',runId:'run_test1',taskId:'task_worker',
-    assigneeHandle:'term_worker',status:'active'},worker:{state:'running'}};
-}else if(check('check')){
-  const valid={id:'msg_question',run_id:'run_test1',to_handle:'run:run_test1',
-    from_handle:'dispatch:ctx_worker',type:'question',subject:'Need input',body:'Question?',
-    payload:'{"dispatchId":"ctx_worker","taskId":"task_worker"}'};
+    assigneeHandle:'term_worker',status:finished?'completed':'active'},
+    worker:{state:finished?'succeeded':'running'}};
+}else if(check('inbox')){
+  const valid={id:mode==='done'?'msg_done':'msg_question',
+    run_id:'run_test1',to_handle:'run:run_test1',
+    from_handle:'dispatch:ctx_worker',
+    type:mode==='done'?'worker_done':'question',
+    read:0,subject:'Need input',body:'Question?',
+    payload:mode==='done'?
+      '{"dispatchId":"ctx_worker","taskId":"task_worker","outcome":"succeeded"}':
+      '{"dispatchId":"ctx_worker","taskId":"task_worker"}'};
   if(mode==='bad_message')valid.id='not_valid';
-  data={runId:'run_test1',messages:[valid]};
+  if(mode==='foreign_recipient')valid.to_handle='run:run_other';
+  let messages=[valid];
+  if(mode==='read_and_new'){
+    messages=[{...valid,read:1}, {...valid,id:'msg_new_question',read:0}];
+  }
+  if(mode==='saturated'){
+    messages=Array.from({length:100},(_,i)=>({...valid,id:'msg_inbox_'+i}));
+  }
+  data={messages,count:messages.length};
 }else{
   process.exit(1);
 }
@@ -59,5 +74,34 @@ test('watcher requires only fixed positional identifiers',()=>{
  const r=spawnSync(process.execPath,['--input-type=module','--eval',source,'--',
  'run_test1','term_ok','ctx_ok','task_ok','bad_watch'],{encoding:'utf8',timeout:5000});
  assert.equal(r.status,64,r.stderr);
+ assert.equal(r.stdout,'');
+});
+
+test('real Orca read-only run-show and run: recipient inbox avoid stable-pane requirement',()=>{
+ const r=runFixture('good');
+ assert.equal(r.status,0,r.stderr);
+ assert.match(r.stdout,/"status":"inbox_attention"/);
+});
+test('read or ACKed questions are filtered out without losing new unread messages',()=>{
+ const r=runFixture('read_and_new');
+ assert.equal(r.status,0,r.stderr);
+ const payload=JSON.parse(r.stdout.trim());
+ assert.deepEqual(payload.messages.map(m=>m.messageId),['msg_new_question']);
+});
+test('finished Worker requires matching unread worker_done outcome',()=>{
+ const r=runFixture('done');
+ assert.equal(r.status,0,r.stderr);
+ const payload=JSON.parse(r.stdout.trim());
+ assert.equal(payload.messages[0].type,'worker_done');
+ assert.equal(payload.messages[0].outcome,'succeeded');
+});
+test('an inbox recipient mismatch is rejected as identity failure',()=>{
+ const r=runFixture('foreign_recipient');
+ assert.equal(r.status,72,r.stderr);
+ assert.equal(r.stdout,'');
+});
+test('saturated Orca inbox fails closed rather than silently dropping unread messages',()=>{
+ const r=runFixture('saturated');
+ assert.equal(r.status,72,r.stderr);
  assert.equal(r.stdout,'');
 });
