@@ -28,6 +28,8 @@ jobs:
           node-version: '22'
       - name: Run Host App tests
         run: node --test src/mcp_tests/agent_continuation_app.test.mjs src/mcp_tests/job_terminal_continuation_app.test.mjs src/mcp_tests/host_continuation_evidence.test.mjs
+      - name: Verify diagnostic Windows PE and SHA-256 validator behavior
+        run: node --test scripts/verify_orca_host_windows_artifact.test.mjs
 
   rust-host-contract:
     name: Rust Host/Store compile check
@@ -142,6 +144,13 @@ jobs:
           }
           $identity | ConvertTo-Json -Depth 4 | Set-Content -Encoding utf8 (Join-Path $out 'manifest.json')
           if ($hash -notmatch '^[0-9a-f]{64}$') { throw 'Invalid binary digest' }
+      - name: Verify source-matched diagnostic artifact
+        shell: pwsh
+        run: |
+          node --test scripts/verify_orca_host_windows_artifact.test.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'Artifact verifier regression failed' }
+          node scripts/verify_orca_host_windows_artifact.mjs target/orca-host-windows-diagnostic $env:GITHUB_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'Native artifact digest or source identity mismatch' }
       - name: Upload non-release diagnostic Host binary
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
