@@ -4,7 +4,7 @@
 use super::{ExecutionPurpose, ToolResult, ToolRuntime};
 use crate::auth::{AuthContext, SCOPE_JOB_RUN, SCOPE_PROJECT_WRITE};
 use webcodex_core::authority::SCOPE_JOB_DETACH;
-use crate::job_terminal_attention::principal_for_auth;
+use crate::job_terminal_attention::managed_orca_host_principal_for_auth;
 use crate::runner_http::RunnerFeature;
 use serde_json::json;
 use sha2::{Digest,Sha256};
@@ -42,8 +42,7 @@ impl ToolRuntime {
             return ToolResult::err_with_output("Host watcher Job permission missing",
                 json!({"error_kind":"orca_host_watcher_unauthorized"}))
         }
-        let principal=principal_for_auth(auth);
-        if matches!(principal.kind.as_str(),"internal"|"bootstrap"|"managed_unowned"|"open_anonymous"){
+        let Some(principal)=managed_orca_host_principal_for_auth(auth) else{
             return ToolResult::err_with_output("Managed Host owner required",
                 json!({"error_kind":"orca_host_watcher_unauthorized"}))
         }

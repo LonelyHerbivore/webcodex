@@ -2,7 +2,7 @@
 //! Store phases and owner provenance are checked before native Host Wait calls.
 use super::{ToolResult,ToolRuntime};
 use crate::auth::{AuthContext,SCOPE_JOB_RUN};
-use crate::job_terminal_attention::principal_for_auth;
+use crate::job_terminal_attention::managed_orca_host_principal_for_auth;
 use serde_json::json;
 
 impl ToolRuntime {
@@ -17,8 +17,7 @@ impl ToolRuntime {
             return ToolResult::err_with_output("Job attention scope unavailable",
                 json!({"error_kind":"orca_host_wait_unauthorized"}))
         }
-        let principal=principal_for_auth(auth);
-        if matches!(principal.kind.as_str(),"internal"|"bootstrap"|"managed_unowned"|"open_anonymous"){
+        let Some(principal)=managed_orca_host_principal_for_auth(auth) else{
             return ToolResult::err_with_output("Managed Host owner required",
                 json!({"error_kind":"orca_host_wait_unauthorized"}))
         }

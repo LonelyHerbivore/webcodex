@@ -1242,3 +1242,25 @@ async fn register_orca_host_wait_and_present_reports_already_terminal_without_ca
     assert!(replay.success);
     assert_eq!(replay.output["wait_id"],wait_id);
 }
+
+#[tokio::test]
+async fn orca_host_intent_read_rejects_unowned_identity_but_allows_named_pat_without_effects() {
+    let (_temp,runtime,db)=attention_runtime().await;
+    let key="pr6_managed_read_only_test_key_123";
+    let unnamed=crate::auth::AuthContext::new(crate::auth::AuthKind::ApiToken);
+    let rejected=runtime.read_orca_host_intent_for_auth(key,Some(&unnamed));
+    assert!(!rejected.success);
+    assert_eq!(rejected.output["error_kind"],"orca_host_intent_unauthorized");
+
+    let mut named=crate::auth::AuthContext::new(crate::auth::AuthKind::ApiToken);
+    named.username=Some("pr6test".to_string());
+    named.api_key_id=Some("readonly-contract-pat-id".to_string());
+    let allowed=runtime.read_orca_host_intent_for_auth(key,Some(&named));
+    assert!(allowed.success,"{:?} {:?}",allowed.error,allowed.output);
+    assert_eq!(allowed.output["status"],"unrecorded");
+    assert_eq!(allowed.output["host_wake_verified"],false);
+    let principal=crate::job_terminal_attention::managed_orca_host_principal_for_auth(
+        Some(&named)
+    ).expect("named PAT must provide stable principal");
+    assert!(db.read_orca_host_intent(&principal,key).unwrap().is_none());
+}

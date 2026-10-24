@@ -1,7 +1,7 @@
 //! Principal-scoped, read-only recovery for Host-owned Orca continuation intents.
 use super::{ToolResult, ToolRuntime};
 use crate::auth::AuthContext;
-use crate::job_terminal_attention::principal_for_auth;
+use crate::job_terminal_attention::managed_orca_host_principal_for_auth;
 use serde_json::json;
 
 impl ToolRuntime {
@@ -16,12 +16,7 @@ impl ToolRuntime {
                 json!({"error_kind":"orca_host_intent_unauthorized"}),
             );
         };
-        let principal = principal_for_auth(auth);
-        // The internal/anonymous defaults never form a caller-owned Host intent.
-        if matches!(
-            principal.kind.as_str(),
-            "internal" | "bootstrap" | "managed_unowned" | "open_anonymous"
-        ) {
+        let Some(principal) = managed_orca_host_principal_for_auth(auth) else {
             return ToolResult::err_with_output(
                 "A managed, authorized Host owner is required",
                 json!({"error_kind":"orca_host_intent_unauthorized"}),
@@ -104,9 +99,13 @@ impl ToolRuntime {
                 json!({"error_kind":"orca_host_intent_unauthorized"}),
             );
         };
-        let principal = principal_for_auth(auth);
-        if matches!(principal.kind.as_str(), "internal" | "bootstrap" | "open_anonymous"
-            | "managed_unowned") || !authority.has_scope(SCOPE_JOB_RUN)
+        let Some(principal) = managed_orca_host_principal_for_auth(auth) else {
+            return ToolResult::err_with_output(
+                "Managed Host owner with stable identity required",
+                json!({"error_kind":"orca_host_intent_unauthorized"}),
+            );
+        };
+        if !authority.has_scope(SCOPE_JOB_RUN)
             || !authority.has_scope(SCOPE_PLUGIN_INVOKE)
             || !authority.has_scope(SCOPE_PROJECT_WRITE)
         {

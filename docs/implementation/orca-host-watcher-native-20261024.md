@@ -130,3 +130,23 @@ the single owned Job. WebCodex CLI, Runner and Server all exited code 0;
 the Test Tunnel lock became absent and profile remains disabled. The
 existing dsh-image-user-question Git status retains its pre-existing
 screenshots.json deletion; it was not altered by this test.
+
+
+## Stable managed-user principal convergence
+
+The first real Test Connector was authenticated as a bootstrap/technical
+identity and correctly rejected by the durable Host Intent Store. A later
+attempt to issue a Test-scoped PAT through the official administrative API
+was blocked by an independent safety gate, so no alternate credential route
+was attempted and no real Worker launch was retried.
+
+Source review identified a second ambiguity: principal_for_auth labels
+a missing-username API caller as kind managed_owner while hashing the
+constant fallback string managed_unowned. Merely checking principal.kind
+therefore accepted an identity with no unique owner. A common
+managed_orca_host_principal_for_auth guard now requires a concrete stable
+username for managed_owner, independently proves an identifier for
+global_user, and excludes bootstrap/internal/open-anonymous principals.
+Read/Reserve, Worker composite, watcher and Wait use the same guard. Unit
+tests cover a genuine named user PAT, absent/whitespace usernames, bootstrap
+and anonymous callers; no credentials are created in these tests.

@@ -688,6 +688,38 @@ pub(crate) fn principal_for_auth(auth: Option<&AuthContext>) -> JobTerminalWaitP
     }
 }
 
+/// Require a stable authenticated owner for crash-fenced Orca Host actions.
+pub(crate) fn managed_orca_host_principal_for_auth(
+    auth: Option<&AuthContext>,
+) -> Option<JobTerminalWaitPrincipal> {
+    let authority = auth?;
+    let principal = principal_for_auth(Some(authority));
+    if matches!(
+        principal.kind.as_str(),
+        "internal" | "bootstrap" | "managed_unowned" | "open_anonymous"
+    ) {
+        return None;
+    }
+    // A missing username is a shared fallback despite the managed_owner kind.
+    if principal.kind == "managed_owner"
+        && !authority.username.as_deref().is_some_and(|v| !v.trim().is_empty())
+    {
+        return None;
+    }
+    if principal.kind == "global_user"
+        && ![
+            authority.user_id.as_deref(),
+            authority.username.as_deref(),
+            authority.api_key_id.as_deref(),
+        ]
+        .iter()
+        .any(|v| v.is_some_and(|name| !name.trim().is_empty()))
+    {
+        return None;
+    }
+    Some(principal)
+}
+
 fn hash_field(hasher: &mut Sha256, value: &str) {
     hasher.update((value.len() as u64).to_be_bytes());
     hasher.update(value.as_bytes());

@@ -6,11 +6,7 @@ use crate::auth::{AuthContext,SCOPE_JOB_RUN,SCOPE_PROJECT_WRITE,SCOPE_PLUGIN_INV
 use crate::runner_http::RunnerFeature;
 use serde_json::json;
 use webcodex_core::authority::SCOPE_JOB_DETACH;
-use crate::job_terminal_attention::principal_for_auth;
-
-fn managed_orca_host_owner(kind: &str) -> bool {
-    !matches!(kind, "internal" | "bootstrap" | "managed_unowned" | "open_anonymous")
-}
+use crate::job_terminal_attention::managed_orca_host_principal_for_auth;
 
 impl ToolRuntime {
     #[allow(clippy::too_many_arguments)]
@@ -35,8 +31,7 @@ impl ToolRuntime {
         // durable principal. The exact downstream Host Intent store rejects
         // unmanaged/anonymous owner kinds. Preflight here BEFORE reserving or
         // dispatching any Worker; never misreport this as OutcomeUnknown.
-        let principal=principal_for_auth(auth);
-        if !managed_orca_host_owner(&principal.kind) {
+        if managed_orca_host_principal_for_auth(auth).is_none() {
             return ToolResult::err_with_output(
                 "A managed Host owner is required for Orca continuation",
                 json!({
@@ -144,14 +139,33 @@ impl ToolRuntime {
 
 #[cfg(test)]
 mod managed_owner_tests {
-    use super::managed_orca_host_owner;
+    use super::*;
+    use crate::auth::AuthKind;
+
     #[test]
     fn reject_unmanaged_host_owner_before_any_worker_dispatch() {
-        for kind in ["internal", "bootstrap", "managed_unowned", "open_anonymous"] {
-            assert!(!managed_orca_host_owner(kind), "{kind}");
-        }
-        for kind in ["shared_key", "authenticated_user"] {
-            assert!(managed_orca_host_owner(kind), "{kind}");
-        }
+        assert!(managed_orca_host_principal_for_auth(None).is_none());
+        let mut bootstrap = AuthContext::new(AuthKind::Bootstrap);
+        bootstrap.is_bootstrap = true;
+        assert!(managed_orca_host_principal_for_auth(Some(&bootstrap)).is_none());
+
+        let anonymous = AuthContext::new(AuthKind::OpenAnonymous);
+        assert!(managed_orca_host_principal_for_auth(Some(&anonymous)).is_none());
+
+        let missing_owner = AuthContext::new(AuthKind::ApiToken);
+        assert!(managed_orca_host_principal_for_auth(Some(&missing_owner)).is_none());
+        let mut whitespace = missing_owner.clone();
+        whitespace.username = Some("   ".to_string());
+        assert!(managed_orca_host_principal_for_auth(Some(&whitespace)).is_none());
+
+        let mut managed = AuthContext::new(AuthKind::ApiToken);
+        managed.username = Some("pr6test".to_string());
+        managed.api_key_id = Some("test-token-identity".to_string());
+        assert_eq!(
+            managed_orca_host_principal_for_auth(Some(&managed))
+                .expect("managed PAT is a stable owner")
+                .kind,
+            "managed_owner"
+        );
     }
 }
