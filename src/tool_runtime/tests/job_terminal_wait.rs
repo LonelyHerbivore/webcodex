@@ -788,21 +788,21 @@ async fn orca_host_intent_recovery_tool_is_owner_scoped_and_read_only() {
         .unwrap();
     assert!(!reservation.replayed);
 
-    let exact = ToolCall::ReadOrcaHostIntent {
+    let exact = || ToolCall::ReadOrcaHostIntent {
         idempotency_key: key.to_owned(),
     };
-    let read = runtime.dispatch_with_auth(exact.clone(), Some(&owner)).await;
+    let read = runtime.dispatch_with_auth(exact(), Some(&owner)).await;
     assert!(read.success, "{:?}", read.error);
     assert_eq!(read.output["status"], "recorded");
     assert_eq!(read.output["state"], "reserved");
     assert_eq!(read.output["project_id"], "agent:laptop-id:isolated-project");
     assert_eq!(read.output["requires_reconciliation"], true);
     assert_eq!(read.output["host_wake_verified"], false);
-    let foreign_read = runtime.dispatch_with_auth(exact.clone(), Some(&foreign)).await;
+    let foreign_read = runtime.dispatch_with_auth(exact(), Some(&foreign)).await;
     assert!(foreign_read.success, "{:?}", foreign_read.error);
     assert_eq!(foreign_read.output["status"], "unrecorded");
     assert_eq!(foreign_read.output["job_id"], serde_json::Value::Null);
-    let unauthorized = runtime.dispatch_with_auth(exact, None).await;
+    let unauthorized = runtime.dispatch_with_auth(exact(), None).await;
     assert!(!unauthorized.success);
     let still_original = db
         .read_orca_host_intent(&principal, key)
