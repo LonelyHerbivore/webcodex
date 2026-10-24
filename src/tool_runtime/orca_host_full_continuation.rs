@@ -107,6 +107,12 @@ impl ToolRuntime {
             "dispatch_id":dispatch_id,"task_id":task_id,
             "job_id":job_id,"wait_id":wait.output["wait_id"],
             "presentation_state":wait.output["presentation_state"],
+            "automatic_resume_available":wait.output["automatic_resume_available"],
+            "continuation_capability_state":if wait.output["automatic_resume_available"]==true {
+                "unattended_carrier_observed_turn_unverified"
+            }else {
+                "no_proven_unattended_carrier"
+            },
             "host_wake_verified":false,
             "guidance":"Worker, first-party watcher and Wait registration are stored. The authorized Host offered a continuation; a later GPT turn must be verified independently."
         }))
