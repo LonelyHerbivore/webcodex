@@ -67,3 +67,14 @@ The artifact is a short-lived **unsigned** diagnostic bundle. Do not replace
 the production Host, Runner or Tunnel, and do not start an old Test Tunnel
 candidate as though it exercises this branch. Isolated tests require a matched
 candidate build and an explicit safe Test lifecycle.
+
+## Precise P0 carrier evidence
+
+The Host Wait admission response and one-call Worker->Watcher->Wait response
+now report automatic_resume_available using the **actual JobTerminalContinuationController
+for the original principal/Wait**. Unknown, user-confirmed-only and unbound
+carriers are false; a presented card, successful Job, durable Wait and completed
+CI remain insufficient evidence of a new ChatGPT model turn. The combined
+tool also reports no_proven_unattended_carrier when capability cannot be
+established. host_wake_verified remains false until an independently observed
+future turn.
