@@ -40,18 +40,20 @@ impl ToolRuntime {
                     "state":record.state,"host_wake_verified":false})),
         };
         if record.state=="registered"{
-            let unattended_available=record.wait_id.as_deref().is_some_and(|id|
-                self.job_terminal_continuations.as_ref().is_some_and(|controller|
-                    controller.automatic_resume_available_for_wait(
+            let carrier_state=record.wait_id.as_deref()
+                .and_then(|id|self.job_terminal_continuations.as_ref().map(|controller|
+                    controller.continuation_carrier_state_for_wait(
                         &principal,id,chrono::Utc::now().timestamp()
                     )
-                )
-            );
+                )).unwrap_or("host_controller_unavailable");
+            let unattended_available=matches!(carrier_state,
+                "host_adapter_reports_unattended"|"mcp_app_operator_declared_unattended");
             return ToolResult::ok(json!({
                 "status":"original_host_wait_recovered","state":"registered",
                 "job_id":job_id,"wait_id":record.wait_id,
                 "presentation_state":"existing_wait_reconcile_current_host",
                 "automatic_resume_available":unattended_available,
+                "continuation_carrier_state":carrier_state,
                 "host_wake_verified":false,
                 "guidance":"Do not register another Wait. An authorized Host may inspect/present this exact original Wait separately."
             }))
@@ -154,11 +156,13 @@ impl ToolRuntime {
         // Read the actual per-Wait Host carrier capability, not inferred from
         // successful Job/Wait creation. Unknown and user-confirmed modes cannot
         // claim unattended resume.
-        let unattended_available=self.job_terminal_continuations.as_ref().is_some_and(
-            |controller|controller.automatic_resume_available_for_wait(
+        let carrier_state=self.job_terminal_continuations.as_ref().map(
+            |controller|controller.continuation_carrier_state_for_wait(
                 &principal,&wait_id,chrono::Utc::now().timestamp()
             )
-        );
+        ).unwrap_or("host_controller_unavailable");
+        let unattended_available=matches!(carrier_state,
+            "host_adapter_reports_unattended"|"mcp_app_operator_declared_unattended");
         // Runner may finish between the original Job snapshot and Wait
         // registration. A terminal Wait must not receive a waiting card.
         let current=match db.read_job_terminal_wait(
@@ -183,6 +187,7 @@ impl ToolRuntime {
                 },
                 "wait_state":format!("{:?}",current.state).to_lowercase(),
                 "automatic_resume_available":unattended_available,
+                "continuation_carrier_state":carrier_state,
                 "host_wake_verified":false,
                 "guidance":"Original Wait is not waiting. Inspect its terminal event and exact Runner Job now. Do not rearm or present a triggered Wait."
             }))
@@ -195,6 +200,7 @@ impl ToolRuntime {
                 "state":"registered","job_id":job_id,"wait_id":wait_id,
                 "presentation_state":"presentation_requires_reconciliation",
                 "automatic_resume_available":unattended_available,
+                "continuation_carrier_state":carrier_state,
                 "host_wake_verified":false,
                 "guidance":"Original Wait is registered. Present exact existing Wait separately; do not create another Worker/Job/Wait."
             }))
@@ -204,6 +210,7 @@ impl ToolRuntime {
             "state":"registered","job_id":job_id,"wait_id":wait_id,
             "presentation_state":"existing_host_card_offered",
             "automatic_resume_available":unattended_available,
+            "continuation_carrier_state":carrier_state,
             "job_terminal_continuation":presented.output["job_terminal_continuation"],
             "host_wake_verified":false,
             "guidance":"Host continuation was offered in the authorized Window; any later GPT turn still requires independent verification."

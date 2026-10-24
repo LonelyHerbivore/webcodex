@@ -73,6 +73,10 @@ jobs:
         run: cargo test --locked -p webcodex reject_unmanaged_host_owner_before_any_worker_dispatch
       - name: Verify named PAT read and reject shared unowned fallback without effects
         run: cargo test --locked -p webcodex orca_host_intent_read_rejects_unowned_identity_but_allows_named_pat_without_effects
+      - name: Verify exact Wait carrier reasons and no false model-turn proof
+        run: |
+          cargo test --locked -p webcodex carrier_reason_does_not_claim_a_new_model_turn_or_change_wait_store
+          cargo test --locked -p webcodex completed_delivery_disables_declared_carrier_and_unknown_wait_is_denied
 
   windows-host-build:
     name: Windows Host/CLI/Runner trio and first-party watcher

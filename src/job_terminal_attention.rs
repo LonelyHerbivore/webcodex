@@ -148,21 +148,27 @@ impl JobTerminalContinuationController {
             .retain(|_, retired| retired.expires_at > now);
     }
 
-    pub(crate) fn automatic_resume_available_for_wait(
+    /// A readiness explanation, never proof that ChatGPT produced another turn.
+    /// An operator-declared MCP App mode still requires a live authorized
+    /// ClientWindow, an actual Host dispatch and independent model observation.
+    pub(crate) fn continuation_carrier_state_for_wait(
         &self,
         principal: &JobTerminalWaitPrincipal,
         wait_id: &str,
         now: i64,
-    ) -> bool {
+    ) -> &'static str {
         self.prune_expired_app_bindings(now);
         let Ok(wait) = self.db.read_job_terminal_wait(principal, wait_id, now) else {
-            return false;
+            return "wait_unavailable";
         };
         if !matches!(
             wait.delivery_state,
             JobTerminalDeliveryState::NotReady | JobTerminalDeliveryState::Pending
         ) {
-            return false;
+            return "delivery_prepared_or_settled";
+        }
+        if self.push_adapter_auto_resume_available() {
+            return "host_adapter_reports_unattended";
         }
         let app_bound = self
             .app_bindings
@@ -170,8 +176,32 @@ impl JobTerminalContinuationController {
             .unwrap_or_else(|poisoned| poisoned.into_inner())
             .get(wait_id)
             .is_some_and(|binding| binding.principal == *principal);
-        (app_bound && self.mcp_app_resume_mode.allows_unattended_claim())
-            || self.push_adapter_auto_resume_available()
+        if !app_bound {
+            return "mcp_app_not_bound";
+        }
+        match self.mcp_app_resume_mode {
+            crate::model_workflow::McpAppResumeMode::Unattended => {
+                "mcp_app_operator_declared_unattended"
+            }
+            crate::model_workflow::McpAppResumeMode::UserConfirmed => {
+                "mcp_app_user_confirmation_required"
+            }
+            crate::model_workflow::McpAppResumeMode::Unknown => {
+                "mcp_app_resume_unverified"
+            }
+        }
+    }
+
+    pub(crate) fn automatic_resume_available_for_wait(
+        &self,
+        principal: &JobTerminalWaitPrincipal,
+        wait_id: &str,
+        now: i64,
+    ) -> bool {
+        matches!(
+            self.continuation_carrier_state_for_wait(principal, wait_id, now),
+            "host_adapter_reports_unattended" | "mcp_app_operator_declared_unattended"
+        )
     }
 
     #[cfg(test)]
@@ -1036,6 +1066,88 @@ mod tests {
             );
         }
         assert!(!controller.automatic_resume_available_for_wait(&principal(), &wait_id, 1_101));
+    }
+
+    #[test]
+    fn carrier_reason_does_not_claim_a_new_model_turn_or_change_wait_store() {
+        use crate::model_workflow::McpAppResumeMode;
+        let temp = tempdir().unwrap();
+        let db = Arc::new(Database::open(&temp.path().join("carrier-readiness.db")).unwrap());
+        let controller = JobTerminalContinuationController::new(db.clone());
+        let wait_id = create_waiting(&db, "job-carrier", "carrier", 1_100);
+        let foreign = foreign_principal();
+        let now = 1_101;
+
+        assert_eq!(
+            controller.continuation_carrier_state_for_wait(&foreign, &wait_id, now),
+            "wait_unavailable"
+        );
+        assert_eq!(
+            controller.continuation_carrier_state_for_wait(&principal(), &wait_id, now),
+            "mcp_app_not_bound"
+        );
+        let before = serde_json::to_value(
+            db.read_job_terminal_wait(&principal(), &wait_id, now).unwrap()
+        ).unwrap();
+
+        controller.bind_mcp_app(
+            &principal(), &wait_id, binding(37), Some("carrier-window"), now,
+        ).unwrap();
+        for (mode, reason, available) in [
+            (McpAppResumeMode::Unknown, "mcp_app_resume_unverified", false),
+            (McpAppResumeMode::UserConfirmed, "mcp_app_user_confirmation_required", false),
+            (McpAppResumeMode::Unattended, "mcp_app_operator_declared_unattended", true),
+        ] {
+            let view = controller.clone().with_mcp_app_resume_mode(mode);
+            assert_eq!(
+                view.continuation_carrier_state_for_wait(&principal(), &wait_id, now),
+                reason
+            );
+            assert_eq!(
+                view.automatic_resume_available_for_wait(&principal(), &wait_id, now),
+                available
+            );
+        }
+        assert_eq!(
+            serde_json::to_value(
+                db.read_job_terminal_wait(&principal(), &wait_id, now).unwrap()
+            ).unwrap(),
+            before
+        );
+    }
+
+    #[test]
+    fn completed_delivery_disables_declared_carrier_and_unknown_wait_is_denied() {
+        use crate::model_workflow::McpAppResumeMode;
+        let temp = tempdir().unwrap();
+        let db = Arc::new(Database::open(&temp.path().join("carrier-prepared.db")).unwrap());
+        let controller = JobTerminalContinuationController::new(db.clone())
+            .with_mcp_app_resume_mode(McpAppResumeMode::Unattended);
+        let wait_id = create_triggered(&db, "job-prepared", "prepared", 2_100);
+        let binding_id = binding(38);
+        controller.bind_mcp_app(
+            &principal(), &wait_id, binding_id.clone(), Some("carrier-window"), 2_101
+        ).unwrap();
+        assert_eq!(
+            controller.continuation_carrier_state_for_wait(&principal(), &wait_id, 2_101),
+            "mcp_app_operator_declared_unattended"
+        );
+        controller.prepare_mcp_app_delivery(
+            &principal(), &wait_id, &binding_id, Some("carrier-window"), 2_102
+        ).unwrap();
+        assert_eq!(
+            controller.continuation_carrier_state_for_wait(&principal(), &wait_id, 2_103),
+            "delivery_prepared_or_settled"
+        );
+        assert!(!controller.automatic_resume_available_for_wait(
+            &principal(), &wait_id, 2_103
+        ));
+        assert_eq!(
+            controller.continuation_carrier_state_for_wait(
+                &principal(), "wc_job_wait_nonexistent", 2_103
+            ),
+            "wait_unavailable"
+        );
     }
 
     #[test]

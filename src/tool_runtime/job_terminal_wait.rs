@@ -235,6 +235,9 @@ impl ToolRuntime {
                     &wait.wait_id,
                     chrono::Utc::now().timestamp(),
                 ),
+                controller.continuation_carrier_state_for_wait(
+                    &principal, &wait.wait_id, chrono::Utc::now().timestamp(),
+                ),
             )
         }))
     }
@@ -267,6 +270,9 @@ impl ToolRuntime {
                         &principal,
                         &wait_id,
                         chrono::Utc::now().timestamp(),
+                    ),
+                    controller.continuation_carrier_state_for_wait(
+                        &principal, &wait_id, chrono::Utc::now().timestamp(),
                     ),
                 ),
                 "host_binding": { "bound": true },
@@ -304,6 +310,9 @@ impl ToolRuntime {
                         &principal,
                         &wait_id,
                         chrono::Utc::now().timestamp(),
+                    ),
+                    controller.continuation_carrier_state_for_wait(
+                        &principal, &wait_id, chrono::Utc::now().timestamp(),
                     ),
                 ),
                 "host_binding": { "bound": true },
@@ -421,7 +430,15 @@ impl ToolRuntime {
             chrono::Utc::now().timestamp(),
         ) {
             Ok(unbound) => ToolResult::ok(json!({
-                "job_terminal_continuation": wait_projection(&unbound.wait, false),
+                "job_terminal_continuation": wait_projection(
+                    &unbound.wait,
+                    controller.automatic_resume_available_for_wait(
+                        &principal, &wait_id, chrono::Utc::now().timestamp(),
+                    ),
+                    controller.continuation_carrier_state_for_wait(
+                        &principal, &wait_id, chrono::Utc::now().timestamp(),
+                    ),
+                ),
                 "host_binding": { "bound": false },
                 "state_changed": unbound.state_changed,
             })),
@@ -451,6 +468,7 @@ fn terminal_to_delivery_settlement_seconds(wait: &JobTerminalWaitRecord) -> Opti
 fn wait_projection(
     wait: &JobTerminalWaitRecord,
     automatic_resume_available: bool,
+    continuation_carrier_state: &'static str,
 ) -> serde_json::Value {
     json!({
         "version": 1,
@@ -464,6 +482,8 @@ fn wait_projection(
         "delivery_settled_at": delivery_settlement_at(wait),
         "terminal_to_delivery_settlement_seconds": terminal_to_delivery_settlement_seconds(wait),
         "automatic_resume_available": automatic_resume_available,
+        "continuation_carrier_state": continuation_carrier_state,
+        "new_gpt_turn_verified": false,
         "expires_at": wait.expires_at,
         "fallback_tool": "observe_jobs",
     })
