@@ -144,6 +144,33 @@ impl ToolRuntime {
                 json!({"error_kind":"orca_host_wait_identity_unknown",
                     "state":"registered","host_wake_verified":false}))
         };
+        // Runner may finish between the original Job snapshot and Wait
+        // registration. A terminal Wait must not receive a waiting card.
+        let current=match db.read_job_terminal_wait(
+            &principal,&wait_id,chrono::Utc::now().timestamp()
+        ){
+            Ok(value)=>value,
+            Err(error)=>return ToolResult::err_with_output(
+                "Original Host Wait became unreadable after registration",
+                json!({"error_kind":error.code,
+                    "job_id":job_id,"wait_id":wait_id,
+                    "state":"registered","host_wake_verified":false}))
+        };
+        if current.state!=webcodex_store::JobTerminalWaitState::Waiting{
+            let terminal=current.state==webcodex_store::JobTerminalWaitState::Triggered;
+            return ToolResult::ok(json!({
+                "status":"original_host_wait_registered",
+                "state":"registered","job_id":job_id,"wait_id":wait_id,
+                "presentation_state":if terminal {
+                    "already_terminal_handle_now"
+                } else {
+                    "original_wait_nonwaiting_requires_reconciliation"
+                },
+                "wait_state":format!("{:?}",current.state).to_lowercase(),
+                "host_wake_verified":false,
+                "guidance":"Original Wait is not waiting. Inspect its terminal event and exact Runner Job now. Do not rearm or present a triggered Wait."
+            }))
+        }
         // Presentation is independently authorized against exact Job/Wait.
         let presented=self.present_job_terminal_continuation(auth,wait_id.clone()).await;
         if !presented.success{
