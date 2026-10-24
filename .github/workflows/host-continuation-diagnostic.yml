@@ -104,7 +104,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          cargo build --locked -p webcodex --bin webcodex-server -p webcodex-cli -p webcodex-runner
+          cargo build --locked -p webcodex -p webcodex-cli -p webcodex-runner
           if ($LASTEXITCODE -ne 0) { throw 'Windows Host/CLI/Runner cargo build failed' }
           foreach ($name in @('webcodex-server', 'webcodex', 'webcodex-runner')) {
             $exe = "target/debug/$name.exe"
