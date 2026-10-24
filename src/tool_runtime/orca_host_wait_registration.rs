@@ -20,7 +20,7 @@ impl ToolRuntime {
         let Some(principal)=managed_orca_host_principal_for_auth(auth) else{
             return ToolResult::err_with_output("Managed Host owner required",
                 json!({"error_kind":"orca_host_wait_unauthorized"}))
-        }
+        };
         let Some(db)=self.job_terminal_db.as_ref() else{
             return ToolResult::err_with_output("Host Store unavailable",
                 json!({"error_kind":"orca_host_wait_store_unavailable"}))

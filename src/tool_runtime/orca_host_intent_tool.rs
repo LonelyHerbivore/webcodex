@@ -21,7 +21,7 @@ impl ToolRuntime {
                 "A managed, authorized Host owner is required",
                 json!({"error_kind":"orca_host_intent_unauthorized"}),
             );
-        }
+        };
         let Some(db) = self.job_terminal_db.as_ref() else {
             return ToolResult::err_with_output(
                 "Host intent Store is unavailable",

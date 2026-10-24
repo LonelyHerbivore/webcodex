@@ -45,7 +45,7 @@ impl ToolRuntime {
         let Some(principal)=managed_orca_host_principal_for_auth(auth) else{
             return ToolResult::err_with_output("Managed Host owner required",
                 json!({"error_kind":"orca_host_watcher_unauthorized"}))
-        }
+        };
         if !valid_id(&idempotency_key,""){
             return ToolResult::err_with_output("Exact original intent key invalid",
                 json!({"error_kind":"orca_host_watcher_invalid"}))
