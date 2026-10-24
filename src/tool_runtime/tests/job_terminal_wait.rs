@@ -1046,3 +1046,48 @@ fn start_orca_worker_with_host_intent_rejects_extra_command_in_schema() {
     assert!(ToolCall::from_tool_name("start_orca_worker_with_host_intent",
         injected).is_err());
 }
+
+#[tokio::test]
+async fn start_orca_host_watcher_job_refuses_missing_detach_and_never_replays_unknown_watch() {
+    let (_tmp,runtime,db)=attention_runtime().await;
+    let mut owner=shared_key_auth_context(&"8".repeat(64));
+    let key="original_watcher_test_123456";
+    let principal=principal_for_auth(Some(&owner));
+    db.reserve_orca_host_intent(&principal,&webcodex_store::NewOrcaHostIntent{
+        idempotency_key:key.to_owned(),request_digest:"a".repeat(64),
+        project_id:"agent:watch-runner:watch-project".to_owned(),
+        run_id:"run_watch".to_owned(),coordinator_handle:"term_watch".to_owned(),
+    },1000).unwrap();
+    db.transition_orca_host_intent(&principal,key,
+        "reserved","worker_start_dispatched",None,None,None,None,1001).unwrap();
+    db.transition_orca_host_intent(&principal,key,
+        "worker_start_dispatched","worker_start_confirmed",
+        Some(("ctx_watch","task_watch")),None,None,None,1002).unwrap();
+    let missing=runtime.start_orca_host_watcher_job(key.to_owned(),Some(&owner)).await;
+    assert!(!missing.success);
+    assert_eq!(missing.output["error_kind"],"orca_host_watcher_unauthorized");
+    let unchanged=db.read_orca_host_intent(&principal,key).unwrap().unwrap();
+    assert_eq!(unchanged.state,"worker_start_confirmed");
+    owner.scopes.push(crate::auth::SCOPE_JOB_DETACH.to_owned());
+    let unowned_project=runtime.start_orca_host_watcher_job(key.to_owned(),Some(&owner)).await;
+    assert!(!unowned_project.success);
+    assert_eq!(unowned_project.output["error_kind"],"orca_host_watcher_project_unauthorized");
+    assert_eq!(db.read_orca_host_intent(&principal,key).unwrap().unwrap().state,
+       "worker_start_confirmed");
+    db.transition_orca_host_intent(&principal,key,"worker_start_confirmed",
+       "watch_start_dispatched",None,None,None,None,1003).unwrap();
+    let uncertain=runtime.start_orca_host_watcher_job(key.to_owned(),Some(&owner)).await;
+    assert!(!uncertain.success);
+    assert_eq!(uncertain.output["error_kind"],"orca_host_watcher_phase_conflict");
+    assert_eq!(db.read_orca_host_intent(&principal,key).unwrap().unwrap().state,
+       "watch_start_dispatched");
+}
+#[test]
+fn start_orca_host_watcher_job_parser_forbids_external_code_and_path() {
+    let value=json!({"idempotency_key":"original_watcher_test_123456"});
+    assert!(matches!(ToolCall::from_tool_name("start_orca_host_watcher_job",value.clone()).unwrap(),
+       ToolCall::StartOrcaHostWatcherJob{..}));
+    let mut injected=value;
+    injected["script"]="C:\\untrusted\\watch.js".into();
+    assert!(ToolCall::from_tool_name("start_orca_host_watcher_job",injected).is_err());
+}

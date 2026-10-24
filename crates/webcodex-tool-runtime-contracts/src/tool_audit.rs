@@ -430,6 +430,10 @@ impl ToolCallAuditProjection for ToolCall {
             Self::ReadOrcaHostIntent { .. } => serde_json::json!({
                 "read_scope": "principal_owned_original_intent",
             }),
+            Self::StartOrcaHostWatcherJob { .. } => serde_json::json!({
+                "source":"first_party_bundled_host_watcher",
+                "intent":"principal_owned_durable_job",
+            }),
             Self::PrepareOrcaHostWorkerContinuation { project_id, run_id, .. }
             | Self::StartOrcaWorkerWithHostIntent { project_id, run_id, .. } => serde_json::json!({
                 "project_id": project_id,

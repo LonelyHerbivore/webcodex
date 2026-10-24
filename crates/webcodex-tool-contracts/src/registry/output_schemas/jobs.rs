@@ -1626,6 +1626,15 @@ pub(super) fn output_schema_for_tool(name: &str) -> Option<Value> {
             ("host_wake_verified", schema_type("boolean", "Always false; later model turn unverified.")),
             ("job_terminal_continuation", nullable_schema("object", "Only the authorized original Host card projection, when waiting.")),
         ])),
+        "start_orca_host_watcher_job" => Some(wrapped_output_schema(vec![
+            ("status", schema_type("string", "Confirmed durable watcher or requires original Job reconciliation.")),
+            ("state", schema_type("string", "Original Host intent phase.")),
+            ("watch_key", nullable_schema("string", "Host-derived first-party watcher key.")),
+            ("job_id", nullable_schema("string", "Exact original Runner Job, if admitted.")),
+            ("wait_idempotency_key", nullable_schema("string", "Next Host Wait key; no Wait registered yet.")),
+            ("watcher_job_started", schema_type("boolean", "True only after authoritative Job acceptance.")),
+            ("host_wake_verified", schema_type("boolean", "Always false; Host carrier unproven.")),
+        ])),
         "start_orca_worker_with_host_intent" => Some(wrapped_output_schema(vec![
             ("status", schema_type("string", "Confirmed Worker, original intent replay or explicit reconciliation.")),
             ("state", schema_type("string", "Original Host durable intent phase.")),

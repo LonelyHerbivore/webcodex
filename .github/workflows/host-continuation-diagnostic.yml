@@ -57,3 +57,9 @@ jobs:
         run: cargo test --locked -p webcodex confirmed_native_orca_worker_result
       - name: Run exact Orca start Plugin binding isolation tests
         run: cargo test --locked -p webcodex orca_worker_start_binding
+      - name: Verify first-party Host watcher Runner Job policy and original intent fence
+        run: cargo test --locked -p webcodex start_orca_host_watcher_job
+      - name: Verify pinned Host/Plugin watcher identity contract
+        run: cargo test --locked -p webcodex bundled_watcher_matches_plugin_first_cycle_key
+      - name: Exercise bundled Node watcher with isolated Orca CLI fixtures
+        run: node --test scripts/orca_host_watcher_contract.test.mjs

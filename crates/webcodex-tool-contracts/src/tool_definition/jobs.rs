@@ -510,6 +510,31 @@ pub(super) const LISTING_DEFINITIONS: &[ToolDefinition] = &[
     require_all_scopes(
         model_spec(
             def(
+                "start_orca_host_watcher_job",
+                super::ToolAuditPolicy::typed_fields(&[
+                    super::ToolAuditResultField::value("status"),
+                    super::ToolAuditResultField::value("state"),
+                    super::ToolAuditResultField::value("error_kind"),
+                ]),
+                ModelVisible, TOOL_CATEGORY_JOB,
+                Some(super::RunnerCapabilityRequirement::DetachedProcess),
+                TOOL_PROVIDER_NATIVE,
+                super::ToolSemanticContract {
+                    effect: super::ToolEffect::Execute, risk: JobRun,
+                    approval: super::ToolApprovalPolicy::Standard,
+                    idempotency: super::ToolIdempotency::Keyed,
+                },
+                Some(JOB_RUN), false, NoPath, false, true,
+                super::ToolSessionEvidencePolicy::NONE,
+            ),
+            "Admit one Host-owned, first-party-bundled Orca Inbox watcher as a durable detached Runner Job for an original confirmed Worker intent. Requires authorized Job Run, Job Detach and Project Write, live Runner support, and an exact prior Host Store Worker/Task binding. Persist watch_start_dispatched BEFORE launching; only an authoritative Runner Job receipt may confirm watch_job_confirmed. Network uncertainty, missing capability or receipt never authorizes a second watcher. The watcher reads Orca inbox/Worker only; never ACKs messages, starts another Worker or claims GPT was awakened.",
+        ),
+        &[JOB_RUN, SCOPE_JOB_DETACH, crate::metadata::PROJECT_WRITE],
+    ),
+
+    require_all_scopes(
+        model_spec(
+            def(
                 "start_orca_worker_with_host_intent",
                 super::ToolAuditPolicy::typed_fields(&[
                     super::ToolAuditResultField::value("status"),

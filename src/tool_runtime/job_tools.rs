@@ -130,6 +130,9 @@ impl ToolRuntime {
                 worker_agent, worktree, worker_spec, plugin_binding,
                 auth, transport
             ).await,
+            ToolCall::StartOrcaHostWatcherJob { idempotency_key } => {
+                self.start_orca_host_watcher_job(idempotency_key, auth).await
+            }
             ToolCall::ArmAndPresentJobTerminalContinuation { job_id, idempotency_key } => {
                 self.arm_and_present_job_terminal_continuation(job_id, idempotency_key, auth).await
             }

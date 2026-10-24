@@ -3150,6 +3150,13 @@ pub enum ToolCall {
         plugin_binding: String,
     },
 
+    /// Start one Host-bundled watcher in an authorized detached Runner Job.
+    /// Never executes a script path or command supplied by the Plugin.
+    StartOrcaHostWatcherJob {
+        #[schemars(length(min = 8, max = 128))]
+        idempotency_key: String,
+    },
+
     /// Read exact caller-owned durable Orca Host continuation identity.
     ReadOrcaHostIntent {
         #[schemars(length(min = 8, max = 128))]
