@@ -41,11 +41,24 @@ function verifyWorker(row){
   return {sender,workerState:row?.worker?.state??null,dispatchStatus:dispatch.status??null};
 }
 function relevantMail(result,worker){
-  if(result?.runId!==runId||!Array.isArray(result.messages))throw new Error('inbox_identity_mismatch');
+  // Orca inbox is a cross-pane read-only API. A Coordinator-pane --check
+  // requires a stable Orca terminal and fails in a detached Runner Job.
+  // The exact recipient filter is run:<runId>; never trust a global inbox.
+  if(!Array.isArray(result?.messages)||!Number.isSafeInteger(result?.count)||
+     result.count!==result.messages.length)
+    throw new Error('inbox_identity_mismatch');
+  // Orca inbox exposes only a bounded tail; at the cap we cannot prove that
+  // earlier unread messages were not omitted. Stop instead of silent loss.
+  if(result.count>=100)throw new Error('inbox_overflow_requires_reconciliation');
   const seen=new Map(),hits=[];
   for(const m of result.messages){
-    if(!['question','escalation','worker_done'].includes(m?.type))continue;
-    if(!token(m.id,'msg_')||m.run_id!==runId||m.to_handle!=='run:'+runId)continue;
+    if(m?.run_id!==runId||m?.to_handle!=='run:'+runId)
+      throw new Error('inbox_identity_mismatch');
+    if(![0,1,true,false].includes(m.read))
+      throw new Error('inbox_read_state_unknown');
+    if(m.read===1||m.read===true)continue;
+    if(!['question','escalation','worker_done'].includes(m.type))continue;
+    if(!token(m.id,'msg_'))continue;
     const identity=JSON.stringify([m.type,m.from_handle,m.payload,m.subject,m.body,m.created_at]);
     if(seen.has(m.id)){
       if(seen.get(m.id)!==identity)throw new Error('inbox_conflicting_message');
@@ -71,11 +84,11 @@ function relevantMail(result,worker){
   return hits;
 }
 async function inspect(){
-  const bound=await read(['orchestration','run-current','--from',coordinator]);
+  const bound=await read(['orchestration','run-show','--id',runId]);
   if(bound?.run?.id!==runId||bound?.run?.coordinator_handle!==coordinator)throw new Error('coordinator_mismatch');
   const row=await read(['orchestration','worker-show','--dispatch',dispatchId]);
   const worker=verifyWorker(row);
-  const inbox=await read(['orchestration','check','--run',runId,'--terminal',coordinator,'--peek']);
+  const inbox=await read(['orchestration','inbox','--terminal','run:'+runId,'--limit','100']);
   const messages=relevantMail(inbox,worker);
   if(messages.length)return {status:'inbox_attention',messages};
   if(['failed','stopped','abandoned'].includes(row?.dispatch?.status)||
@@ -98,7 +111,8 @@ while(Date.now()<deadline){
     }
   }catch(err){
     if(['worker_identity_mismatch','worker_sender_unverifiable','inbox_identity_mismatch',
-      'inbox_conflicting_message','coordinator_mismatch'].includes(err?.message)){
+      'inbox_conflicting_message','inbox_read_state_unknown',
+      'inbox_overflow_requires_reconciliation','coordinator_mismatch'].includes(err?.message)){
       process.stderr.write('host_orca_watcher_identity_failure\n');
       process.exit(72);
     }
