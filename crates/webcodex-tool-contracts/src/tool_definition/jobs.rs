@@ -510,6 +510,37 @@ pub(super) const LISTING_DEFINITIONS: &[ToolDefinition] = &[
     require_all_scopes(
         model_spec(
             def(
+                "start_orca_worker_with_host_intent",
+                super::ToolAuditPolicy::typed_fields(&[
+                    super::ToolAuditResultField::value("status"),
+                    super::ToolAuditResultField::value("state"),
+                    super::ToolAuditResultField::value("error_kind"),
+                ]),
+                ModelVisible,
+                TOOL_CATEGORY_JOB,
+                None,
+                TOOL_PROVIDER_NATIVE,
+                super::ToolSemanticContract {
+                    effect: super::ToolEffect::Execute,
+                    risk: JobRun,
+                    approval: super::ToolApprovalPolicy::Standard,
+                    idempotency: super::ToolIdempotency::Keyed,
+                },
+                Some(JOB_RUN),
+                false,
+                NoPath,
+                false,
+                true,
+                super::ToolSessionEvidencePolicy::NONE,
+            ),
+            "Run one user-authorized Orca Worker through the existing independently governed plugin_tool call, never a private Plugin or terminal shortcut. A Project-bound exact orca_start_worker describe binding is required. Reserves a principal-owned immutable request in the Host database, CAS-fences worker_start_dispatched BEFORE Plugin effect; subsequent calls never repeat a dispatched Worker. A non-confirmed Plugin result requires independent Orca reconciliation. On confirmed Run/Dispatch/Task only record the original IDs; this does not start watcher Job, register Host Wait or wake GPT. Requires job:run, project:write and plugin:invoke and may be denied by the original Plugin Gateway/session permission policy.",
+        ),
+        &[JOB_RUN, SCOPE_PLUGIN_INVOKE, crate::metadata::PROJECT_WRITE],
+    ),
+
+    require_all_scopes(
+        model_spec(
+            def(
                 "prepare_orca_host_worker_continuation",
                 super::ToolAuditPolicy::typed_fields(&[
                     super::ToolAuditResultField::value("status"),
@@ -536,7 +567,7 @@ pub(super) const LISTING_DEFINITIONS: &[ToolDefinition] = &[
             ),
             "Reserve a private Host-owned Orca Worker continuation intent only after independently authorizing the exact Project, job:run and plugin:invoke scopes. Store only a bounded canonical request SHA256, never a raw worker prompt. Exact replay recovers the original state; a changed spec conflicts. This creates NO Worker, Runner Job, Wait or ChatGPT turn. An unknown external effect must always be reconciled before any later Worker start.",
         ),
-        &[crate::metadata::JOB_RUN, SCOPE_PLUGIN_INVOKE],
+        &[crate::metadata::JOB_RUN, SCOPE_PLUGIN_INVOKE, crate::metadata::PROJECT_WRITE],
     ),
 
     model_spec(

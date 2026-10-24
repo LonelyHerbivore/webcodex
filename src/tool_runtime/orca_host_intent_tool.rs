@@ -92,10 +92,11 @@ impl ToolRuntime {
         coordinator_handle: String,
         idempotency_key: String,
         worker_agent: String,
+        worktree: String,
         worker_spec: String,
         auth: Option<&AuthContext>,
     ) -> ToolResult {
-        use crate::auth::{SCOPE_JOB_RUN, SCOPE_PLUGIN_INVOKE};
+        use crate::auth::{SCOPE_JOB_RUN, SCOPE_PLUGIN_INVOKE, SCOPE_PROJECT_WRITE};
         use sha2::{Digest, Sha256};
         let Some(authority) = auth else {
             return ToolResult::err_with_output(
@@ -107,6 +108,7 @@ impl ToolRuntime {
         if matches!(principal.kind.as_str(), "internal" | "bootstrap" | "open_anonymous"
             | "managed_unowned") || !authority.has_scope(SCOPE_JOB_RUN)
             || !authority.has_scope(SCOPE_PLUGIN_INVOKE)
+            || !authority.has_scope(SCOPE_PROJECT_WRITE)
         {
             return ToolResult::err_with_output(
                 "Host owner needs explicit Runner job and Plugin invoke scope",
@@ -118,6 +120,8 @@ impl ToolRuntime {
         if !matches!(worker_agent.as_str(),
             "codex" | "claude" | "claudecode" | "agy" | "dsh" | "antigravity")
             || worker_spec.is_empty() || worker_spec.len()>4096
+            || worktree.is_empty() || worktree.len()>1024
+            || worktree.chars().any(char::is_control)
             || worker_spec.chars().any(|c| c == '\0')
             || !project_id.starts_with("agent:") || project_id.len()>256
         {
@@ -152,7 +156,7 @@ impl ToolRuntime {
         for part in [
             project_id.as_str(), run_id.as_str(),
             coordinator_handle.as_str(), worker_agent.as_str(),
-            worker_spec.as_str(),
+            worktree.as_str(), worker_spec.as_str(),
         ] {
             digest.update((part.len() as u64).to_be_bytes());
             digest.update(part.as_bytes());

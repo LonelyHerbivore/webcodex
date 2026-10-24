@@ -51,3 +51,7 @@ jobs:
         run: cargo test --locked -p webcodex arm_and_present_job_terminal_continuation
       - name: Run Host persisted Worker intent authorization tests
         run: cargo test --locked -p webcodex prepare_orca_host_worker_continuation
+      - name: Run Host Orca Worker Plugin Gateway launch-fence tests
+        run: cargo test --locked -p webcodex start_orca_worker_with_host_intent
+      - name: Run Host Orca result identity validator
+        run: cargo test --locked -p webcodex confirmed_native_orca_worker_result

@@ -3,7 +3,7 @@
 use super::*;
 
 impl ToolRuntime {
-    pub(super) async fn dispatch_plugin_gateway(
+    pub(crate) async fn dispatch_plugin_gateway(
         &self,
         plugin: crate::tool_runtime::PluginToolCall,
         recording_session_id: Option<&str>,

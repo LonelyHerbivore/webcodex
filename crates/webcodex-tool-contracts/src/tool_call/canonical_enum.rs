@@ -3122,8 +3122,32 @@ pub enum ToolCall {
         idempotency_key: String,
         #[schemars(length(min = 1, max = 24))]
         worker_agent: String,
+        #[schemars(length(min = 1, max = 1024))]
+        worktree: String,
         #[schemars(length(min = 1, max = 4096))]
         worker_spec: String,
+    },
+
+    /// Host-owned, crash-fenced call through an exact pre-described Orca
+    /// Plugin binding; never bypasses standard Plugin permission governance.
+    /// Starts at most one Worker; Job/Wait registration remains independent.
+    StartOrcaWorkerWithHostIntent {
+        #[schemars(regex(pattern = "^agent:[A-Za-z0-9_-]+:[A-Za-z0-9_-]+$"))]
+        project_id: String,
+        #[schemars(regex(pattern = "^run_[A-Za-z0-9_-]{1,123}$"))]
+        run_id: String,
+        #[schemars(regex(pattern = "^term_[A-Za-z0-9_-]{1,123}$"))]
+        coordinator_handle: String,
+        #[schemars(length(min = 8, max = 128))]
+        idempotency_key: String,
+        #[schemars(length(min = 1, max = 24))]
+        worker_agent: String,
+        #[schemars(length(min = 1, max = 1024))]
+        worktree: String,
+        #[schemars(length(min = 1, max = 4096))]
+        worker_spec: String,
+        #[schemars(regex(pattern = "^wc_pbind_[A-Za-z0-9_-]{21}[AQgw]$"))]
+        plugin_binding: String,
     },
 
     /// Read exact caller-owned durable Orca Host continuation identity.

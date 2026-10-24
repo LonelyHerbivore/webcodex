@@ -198,6 +198,28 @@ impl PluginOperation {
     }
 }
 
+/// Strict Host preflight for an Orca Worker launch. An opaque describe binding
+/// is observation identity only, NEVER authority; the normal Plugin gateway
+/// independently re-checks the Runner, provider instance, schema, Project
+/// write scope, business session and approval before dispatch.
+pub(crate) fn is_exact_orca_worker_start_binding(
+    runtime: &ToolRuntime,
+    binding: &str,
+    project: &str,
+    runner_client_id: &str,
+) -> bool {
+    let Some(observed) = runtime.plugin_gateway.binding(binding) else {
+        return false;
+    };
+    observed.provider_id == "orca"
+        && observed.tool_name == "orca_start_worker"
+        && observed.client_id == runner_client_id
+        && observed
+            .project
+            .as_ref()
+            .is_some_and(|target| target.canonical_id == project)
+}
+
 pub(crate) fn invoke_authorized(auth: Option<&AuthContext>) -> bool {
     auth.is_some_and(|auth| auth.has_scope(SCOPE_PLUGIN_INVOKE))
 }

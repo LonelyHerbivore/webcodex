@@ -906,6 +906,7 @@ async fn prepare_orca_host_worker_continuation_durably_fences_authorized_project
         coordinator_handle:"term_owned".to_owned(),
         idempotency_key:"original_worker_prepare_12345".to_owned(),
         worker_agent:"codex".to_owned(),
+        worktree:"test-worktree".to_owned(),
         worker_spec:spec.to_owned(),
     };
     let denied=runtime.dispatch_with_auth(make("Read-only task"),Some(&owner)).await;
@@ -970,6 +971,7 @@ fn prepare_orca_host_worker_continuation_rejects_injected_tool_fields() {
         "coordinator_handle":"term_owned",
         "idempotency_key":"original_worker_prepare_12345",
         "worker_agent":"codex",
+        "worktree":"test-worktree",
         "worker_spec":"simple"
     });
     let parsed=ToolCall::from_tool_name(
@@ -981,4 +983,65 @@ fn prepare_orca_host_worker_continuation_rejects_injected_tool_fields() {
     assert!(ToolCall::from_tool_name(
         "prepare_orca_host_worker_continuation",bad
     ).is_err());
+}
+
+#[tokio::test]
+async fn start_orca_worker_with_host_intent_never_dispatches_on_unbound_plugin_or_replay() {
+    let (_temp,runtime,db)=attention_runtime().await;
+    let mut owner=shared_key_auth_context(&"7".repeat(64));
+    owner.scopes.push(crate::auth::SCOPE_PLUGIN_INVOKE.to_owned());
+    let project="agent:orca-launch:project-launch".to_string();
+    register_agent_projects_for_auth(&runtime,"orca-launch",&owner,
+        RunnerCapabilities::default(),
+        vec![registered_project("project-launch","/tmp/project-launch")],
+    ).await;
+    let make=||ToolCall::StartOrcaWorkerWithHostIntent{
+        project_id:project.clone(),
+        run_id:"run_launch".to_string(),
+        coordinator_handle:"term_launch".to_string(),
+        idempotency_key:"orca_worker_launch_123456".to_string(),
+        worker_agent:"codex".to_string(),
+        worktree:"test-worktree".to_string(),
+        worker_spec:"Test only".to_string(),
+        plugin_binding:"wc_pbind_NON_EXISTENT".to_string(),
+    };
+    let first=runtime.dispatch_with_auth(make(),Some(&owner)).await;
+    assert!(!first.success);
+    assert_eq!(first.output["error_kind"],"orca_host_worker_binding_invalid");
+    let principal=principal_for_auth(Some(&owner));
+    let original=db.read_orca_host_intent(&principal,
+        "orca_worker_launch_123456").unwrap().unwrap();
+    assert_eq!(original.state,"reserved");
+    assert!(original.dispatch_id.is_none());
+    db.transition_orca_host_intent(&principal,"orca_worker_launch_123456",
+        "reserved","worker_start_dispatched",None,None,None,None,
+        chrono::Utc::now().timestamp()).unwrap();
+    let replay=runtime.dispatch_with_auth(make(),Some(&owner)).await;
+    assert!(replay.success,"{:?}",replay.error);
+    assert_eq!(replay.output["status"],"original_worker_launch_requires_reconciliation");
+    assert_eq!(replay.output["state"],"worker_start_dispatched");
+    assert_eq!(replay.output["watcher_job_started"],false);
+    assert_eq!(db.read_orca_host_intent(&principal,
+        "orca_worker_launch_123456").unwrap().unwrap().state,
+        "worker_start_dispatched");
+}
+#[test]
+fn start_orca_worker_with_host_intent_rejects_extra_command_in_schema() {
+    let value=json!({
+        "project_id":"agent:orca-launch:project-launch",
+        "run_id":"run_launch",
+        "coordinator_handle":"term_launch",
+        "idempotency_key":"orca_worker_launch_123456",
+        "worker_agent":"codex",
+        "worktree":"test-worktree",
+        "worker_spec":"Test only",
+        "plugin_binding":"wc_pbind_aaaaaaaaaaaaaaaaaaaaaA"
+    });
+    assert!(matches!(ToolCall::from_tool_name(
+        "start_orca_worker_with_host_intent",value.clone()).unwrap(),
+        ToolCall::StartOrcaWorkerWithHostIntent{..}));
+    let mut injected=value;
+    injected["command"]=json!("echo bypass");
+    assert!(ToolCall::from_tool_name("start_orca_worker_with_host_intent",
+        injected).is_err());
 }

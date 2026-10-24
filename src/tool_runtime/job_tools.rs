@@ -32,6 +32,7 @@ impl ToolRuntime {
         auth: Option<&AuthContext>,
         ssh_resource: Option<&str>,
         correlation: &mut ToolCallCorrelation,
+        transport: super::sessions::SessionTransport,
     ) -> ToolResult {
         match call {
             ToolCall::RunJob {
@@ -116,10 +117,18 @@ impl ToolRuntime {
             }
             ToolCall::PrepareOrcaHostWorkerContinuation {
                 project_id, run_id, coordinator_handle, idempotency_key,
-                worker_agent, worker_spec
+                worker_agent, worktree, worker_spec
             } => self.prepare_orca_host_worker_continuation(
                 project_id, run_id, coordinator_handle, idempotency_key,
-                worker_agent, worker_spec, auth
+                worker_agent, worktree, worker_spec, auth
+            ).await,
+            ToolCall::StartOrcaWorkerWithHostIntent {
+                project_id, run_id, coordinator_handle, idempotency_key,
+                worker_agent, worktree, worker_spec, plugin_binding,
+            } => self.start_orca_worker_with_host_intent(
+                project_id, run_id, coordinator_handle, idempotency_key,
+                worker_agent, worktree, worker_spec, plugin_binding,
+                auth, transport
             ).await,
             ToolCall::ArmAndPresentJobTerminalContinuation { job_id, idempotency_key } => {
                 self.arm_and_present_job_terminal_continuation(job_id, idempotency_key, auth).await
