@@ -1184,8 +1184,9 @@ async fn start_orca_worker_with_continuation_preflights_detached_authority_befor
 async fn orca_composite_preflight_explains_user_login_without_creating_worker_or_intent() {
     let (_tmp, runtime, db) = attention_runtime().await;
     let key = "orca_managed_owner_required_test_123";
-    let call = |auth: Option<&crate::auth::AuthContext>| {
-        runtime.start_orca_worker_with_continuation(
+    macro_rules! call {
+        ($auth:expr) => {
+            runtime.start_orca_worker_with_continuation(
             "agent:test-runner:disposable".to_owned(),
             "run_disposable".to_owned(),
             "term_disposable".to_owned(),
@@ -1194,11 +1195,12 @@ async fn orca_composite_preflight_explains_user_login_without_creating_worker_or
             "current".to_owned(),
             "Read only smoke test".to_owned(),
             "wc_pbind_aaaaaaaaaaaaaaaaaaaaaA".to_owned(),
-            auth,
-            super::super::sessions::SessionTransport::Mcp,
-        )
-    };
-    let no_auth = call(None).await;
+                $auth,
+                super::super::sessions::SessionTransport::Mcp,
+            )
+        };
+    }
+    let no_auth = call!(None).await;
     assert!(!no_auth.success);
     assert_eq!(no_auth.output["status"], "orca_host_composite_preflight_denied");
     assert_eq!(no_auth.output["error_kind"], "orca_host_composite_missing_identity");
@@ -1209,7 +1211,7 @@ async fn orca_composite_preflight_explains_user_login_without_creating_worker_or
 
     let mut bootstrap = crate::auth::AuthContext::new(crate::auth::AuthKind::Bootstrap);
     bootstrap.is_bootstrap = true;
-    let rejected = call(Some(&bootstrap)).await;
+    let rejected = call!(Some(&bootstrap)).await;
     assert!(!rejected.success);
     assert_eq!(rejected.output["error_kind"], "orca_host_composite_managed_owner_required");
     assert_eq!(rejected.output["side_effects_dispatched"], false);
@@ -1220,7 +1222,7 @@ async fn orca_composite_preflight_explains_user_login_without_creating_worker_or
     let mut named_pat = crate::auth::AuthContext::new(crate::auth::AuthKind::ApiToken);
     named_pat.username = Some("pr6test".to_owned());
     named_pat.api_key_id = Some("read-only-test-credential".to_owned());
-    let without_scopes = call(Some(&named_pat)).await;
+    let without_scopes = call!(Some(&named_pat)).await;
     assert!(!without_scopes.success);
     assert_eq!(without_scopes.output["error_kind"], "orca_host_composite_missing_scopes");
     assert_eq!(without_scopes.output["required_scopes"].as_array().unwrap().len(), 4);
