@@ -509,6 +509,33 @@ pub(super) const EXECUTION_DEFINITIONS: &[ToolDefinition] = &[
 pub(super) const LISTING_DEFINITIONS: &[ToolDefinition] = &[
     model_spec(
         def(
+            "arm_and_present_job_terminal_continuation",
+            super::ToolAuditPolicy::TYPED_CANONICAL,
+            ModelVisible,
+            TOOL_CATEGORY_JOB,
+            None,
+            TOOL_PROVIDER_NATIVE,
+            super::ToolSemanticContract {
+                effect: super::ToolEffect::Mutate,
+                risk: Read,
+                approval: super::ToolApprovalPolicy::None,
+                idempotency: super::ToolIdempotency::Keyed,
+            },
+            Some(RUNTIME_READ),
+            false,
+            NoPath,
+            false,
+            false,
+            super::ToolSessionEvidencePolicy::NONE,
+        ).with_activity(
+            super::ToolActivityPresentation::Transport,
+            super::ToolActivityInteraction::Meaningful,
+        ),
+        "One authorized Host call for an already-started exact Runner Job: register a durable keyed terminal Wait and present the Host continuation card only if still waiting. Already-triggered terminal results are returned to the current model turn. Requires an explicitly established continuation workflow. It does not start or retry a Worker/Job, create a ChatGPT turn, or guarantee background wake. On lost acknowledgement reconcile the original wait via the exact key before any follow-up.",
+    ),
+
+    model_spec(
+        def(
             "read_orca_host_intent",
             super::ToolAuditPolicy::typed_fields(&[
                 super::ToolAuditResultField::value("status"),

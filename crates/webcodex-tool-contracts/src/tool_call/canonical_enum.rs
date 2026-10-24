@@ -3100,6 +3100,14 @@ pub enum ToolCall {
         idempotency_key: String,
     },
 
+    /// Atomically register and present an existing authorized Job without launching work.
+    ArmAndPresentJobTerminalContinuation {
+        #[schemars(length(min = 1, max = 128))]
+        job_id: String,
+        #[schemars(length(min = 1, max = 128))]
+        idempotency_key: String,
+    },
+
     /// Read exact caller-owned durable Orca Host continuation identity.
     ReadOrcaHostIntent {
         #[schemars(length(min = 8, max = 128))]

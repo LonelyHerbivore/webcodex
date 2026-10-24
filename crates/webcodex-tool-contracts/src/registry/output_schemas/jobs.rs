@@ -1616,6 +1616,16 @@ pub(super) fn output_schema_for_tool(name: &str) -> Option<Value> {
                 schema_type("string", "Ownership basis: project_and_session or unknown_session_project_only."),
             ),
         ])),
+        "arm_and_present_job_terminal_continuation" => Some(wrapped_output_schema(vec![
+            ("wait_id", schema_type("string", "Original durable Host Job terminal Wait.")),
+            ("job_id", schema_type("string", "Exact original Runner Job.")),
+            ("state", schema_type("string", "Original Wait lifecycle: waiting or triggered.")),
+            ("replayed", schema_type("boolean", "Same keyed Wait already existed.")),
+            ("registration_state", schema_type("string", "Existing Job terminal Wait is registered.")),
+            ("presentation_state", schema_type("string", "Card presented, or terminal state handled in current turn.")),
+            ("host_wake_verified", schema_type("boolean", "Always false; later model turn unverified.")),
+            ("job_terminal_continuation", nullable_schema("object", "Only the authorized original Host card projection, when waiting.")),
+        ])),
         "read_orca_host_intent" => Some(wrapped_output_schema(vec![
             ("status", schema_type("string", "Recorded or unrecorded.")),
             ("state", nullable_schema("string", "Durable Host lifecycle phase or null.")),

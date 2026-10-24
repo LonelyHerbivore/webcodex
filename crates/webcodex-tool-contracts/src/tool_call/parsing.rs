@@ -564,6 +564,7 @@ impl ToolCall {
             Self::ObserveJobs { .. } => "observe_jobs",
             Self::WaitForJobReadiness { .. } => "wait_for_job_readiness",
             Self::WaitForJobTerminal { .. } => "wait_for_job_terminal",
+            Self::ArmAndPresentJobTerminalContinuation { .. } => "arm_and_present_job_terminal_continuation",
             Self::ReadOrcaHostIntent { .. } => "read_orca_host_intent",
             Self::PresentJobTerminalContinuation { .. } => "present_job_terminal_continuation",
             Self::JobTerminalContinuationBind { .. } => "bind_job_terminal_continuation",

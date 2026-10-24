@@ -827,3 +827,64 @@ fn read_orca_host_intent_accepts_only_bounded_canonical_tool_arguments() {
     )
     .is_err());
 }
+
+#[tokio::test]
+async fn arm_and_present_job_terminal_continuation_uses_one_authorized_original_job_and_wait() {
+    let (_temp,runtime,db)=attention_runtime().await;
+    let owner=shared_key_auth_context(&"e".repeat(64));
+    let foreign=shared_key_auth_context(&"f".repeat(64));
+    let (job_id,request)=start_owned_job(&runtime,"orca-onecall","project-orca",&owner).await;
+    let keyed=||ToolCall::ArmAndPresentJobTerminalContinuation {
+        job_id:job_id.clone(),
+        idempotency_key:"orca_onecall_stable_arm".to_owned(),
+    };
+    let denied=runtime.dispatch_with_auth(keyed(),Some(&foreign)).await;
+    assert!(!denied.success);
+    let first=runtime.dispatch_with_auth(keyed(),Some(&owner)).await;
+    assert!(first.success,"{:?}",first.error);
+    assert_eq!(first.output["registration_state"],"registered");
+    assert_eq!(first.output["presentation_state"],"waiting_card_presented");
+    assert_eq!(first.output["state"],"waiting");
+    assert_eq!(first.output["host_wake_verified"],false);
+    assert_eq!(first.output["automatic_resume_available"],false);
+    assert_eq!(first.output["job_terminal_continuation"]["wait_id"],first.output["wait_id"]);
+    let wait_id=first.output["wait_id"].as_str().unwrap().to_owned();
+    let second=runtime.dispatch_with_auth(keyed(),Some(&owner)).await;
+    assert!(second.success,"{:?}",second.error);
+    assert_eq!(second.output["wait_id"],wait_id);
+    assert_eq!(second.output["replayed"],true);
+    let principal=principal_for_auth(Some(&owner));
+    complete_job(&runtime,"orca-onecall",&request,Some(1)).await;
+    let durable=db.read_job_terminal_wait(&principal,&wait_id,chrono::Utc::now().timestamp()).unwrap();
+    assert_eq!(durable.state,JobTerminalWaitState::Triggered);
+    assert_eq!(durable.delivery_state,JobTerminalDeliveryState::Pending);
+    let settled=runtime.dispatch_with_auth(keyed(),Some(&owner)).await;
+    assert!(settled.success,"{:?}",settled.error);
+    assert_eq!(settled.output["presentation_state"],"already_terminal_handle_now");
+    assert_eq!(settled.output["terminal_status"],"completed");
+    assert!(settled.output.get("job_terminal_continuation").is_none());
+}
+#[tokio::test]
+async fn arm_and_present_job_terminal_continuation_handles_completed_job_without_card() {
+    let (_temp,runtime,_db)=attention_runtime().await;
+    let owner=shared_key_auth_context(&"2".repeat(64));
+    let (job_id,request)=start_owned_job(&runtime,"orca-fastjob","project-fast",&owner).await;
+    complete_job(&runtime,"orca-fastjob",&request,Some(1)).await;
+    let result=runtime.dispatch_with_auth(ToolCall::ArmAndPresentJobTerminalContinuation{
+        job_id,
+        idempotency_key:"orca_fastjob_exact_once".to_owned(),
+    },Some(&owner)).await;
+    assert!(result.success,"{:?}",result.error);
+    assert_eq!(result.output["state"],"triggered");
+    assert_eq!(result.output["presentation_state"],"already_terminal_handle_now");
+    assert_eq!(result.output["terminal_outcome"],"succeeded");
+    assert!(result.output.get("job_terminal_continuation").is_none());
+}
+#[test]
+fn arm_and_present_job_terminal_continuation_contract_refuses_injected_fields() {
+    let valid=ToolCall::from_tool_name("arm_and_present_job_terminal_continuation",
+       json!({"job_id":"wc_job_12345678","idempotency_key":"original_stable_key"})).unwrap();
+    assert!(matches!(valid,ToolCall::ArmAndPresentJobTerminalContinuation{..}));
+    assert!(ToolCall::from_tool_name("arm_and_present_job_terminal_continuation",
+       json!({"job_id":"wc_job_12345678","idempotency_key":"original_stable_key","command":"echo unauthorized"})).is_err());
+}

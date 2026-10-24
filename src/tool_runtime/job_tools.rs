@@ -114,6 +114,9 @@ impl ToolRuntime {
             ToolCall::ReadOrcaHostIntent { idempotency_key } => {
                 self.read_orca_host_intent_for_auth(&idempotency_key, auth)
             }
+            ToolCall::ArmAndPresentJobTerminalContinuation { job_id, idempotency_key } => {
+                self.arm_and_present_job_terminal_continuation(job_id, idempotency_key, auth).await
+            }
             ToolCall::ListJobs {
                 limit,
                 status,

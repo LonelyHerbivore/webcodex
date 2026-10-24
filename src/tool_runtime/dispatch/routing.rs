@@ -344,6 +344,7 @@ impl ToolRuntime {
             | ToolCall::ObserveJobs { .. }
             | ToolCall::WaitForJobReadiness { .. }
             | ToolCall::WaitForJobTerminal { .. }
+            | ToolCall::ArmAndPresentJobTerminalContinuation { .. }
             | ToolCall::ReadOrcaHostIntent { .. }
             | ToolCall::ListJobs { .. }
             | ToolCall::JobTail { .. }) => {

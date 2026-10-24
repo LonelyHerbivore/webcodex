@@ -423,7 +423,8 @@ impl ToolCallAuditProjection for ToolCall {
                 "unique_jobs": job_ids.iter().collect::<std::collections::HashSet<_>>().len(),
                 "wait_secs": wait_secs,
             }),
-            Self::WaitForJobTerminal { job_id, .. } => serde_json::json!({
+            Self::WaitForJobTerminal { job_id, .. }
+            | Self::ArmAndPresentJobTerminalContinuation { job_id, .. } => serde_json::json!({
                 "job_id": job_id,
             }),
             Self::ReadOrcaHostIntent { .. } => serde_json::json!({
