@@ -50,6 +50,50 @@ impl ToolRuntime {
         auth:Option<&AuthContext>,
         transport:super::sessions::SessionTransport,
     ) -> ToolResult {
+        // A missing/foreign Project-bound binding is a caller error, not an
+        // attempted external Worker operation. Reject it before reserving a
+        // persistent idempotency key; otherwise an invalid first call can lock
+        // out the legitimate first Worker launch on that key forever.
+        //
+        // Preserve recovery semantics: an existing intent (especially one in
+        // worker_start_dispatched) must reach the authoritative preparation
+        // replay path, even if its old Plugin binding has since expired.
+        let has_required_scopes=auth.is_some_and(|owner|
+            owner.has_scope(crate::auth::SCOPE_JOB_RUN)
+            && owner.has_scope(crate::auth::SCOPE_PROJECT_WRITE)
+            && owner.has_scope(crate::auth::SCOPE_PLUGIN_INVOKE));
+        if has_required_scopes {
+            let Some(store)=self.job_terminal_db.as_ref() else {
+                return ToolResult::err_with_output("Host intent Store unavailable",
+                    json!({"error_kind":"orca_host_intent_store_unavailable"}))
+            };
+            let principal=principal_for_auth(auth);
+            let existing=match store.read_orca_host_intent(&principal,&idempotency_key) {
+                Ok(record)=>record.is_some(),
+                Err(_)=>return ToolResult::err_with_output(
+                    "Cannot establish original Host intent state safely",
+                    json!({"error_kind":"orca_host_intent_read_uncertain",
+                        "status":"original_worker_launch_requires_reconciliation",
+                        "worker_started":null,"host_wake_verified":false}))
+            };
+            if !existing {
+                let resolved=match self.resolve_project_input_for_auth(&project_id,auth).await {
+                    Ok(value) if value.resolved_id==project_id=>value,
+                    _=>return ToolResult::err_with_output(
+                        "Original Runner Project authorization unavailable",
+                        json!({"error_kind":"orca_host_intent_project_unauthorized"}))
+                };
+                if !crate::plugin_gateway::is_exact_orca_worker_start_binding(
+                    self,&plugin_binding,&project_id,&resolved.config.client_id
+                ) {
+                    return ToolResult::err_with_output(
+                        "A pre-described Project-bound exact orca_start_worker binding is required",
+                        json!({"error_kind":"orca_host_worker_binding_invalid",
+                            "state":"unrecorded","worker_started":false,
+                            "host_wake_verified":false}))
+                }
+            }
+        }
         // The existing preparation function is the single owner of identity,
         // principal-scoped reservation, Project and scope preflight.
         let prepared=self.prepare_orca_host_worker_continuation(

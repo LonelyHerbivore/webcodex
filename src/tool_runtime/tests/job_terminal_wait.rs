@@ -987,7 +987,7 @@ fn prepare_orca_host_worker_continuation_rejects_injected_tool_fields() {
 }
 
 #[tokio::test]
-async fn start_orca_worker_with_host_intent_never_dispatches_on_unbound_plugin_or_replay() {
+async fn start_orca_worker_with_host_intent_invalid_binding_does_not_consume_intent_key() {
     let (_temp,runtime,db)=attention_runtime().await;
     let mut owner=shared_key_auth_context(&"7".repeat(64));
     owner.scopes.push(crate::auth::SCOPE_PLUGIN_INVOKE.to_owned());
@@ -1010,21 +1010,40 @@ async fn start_orca_worker_with_host_intent_never_dispatches_on_unbound_plugin_o
     assert!(!first.success);
     assert_eq!(first.output["error_kind"],"orca_host_worker_binding_invalid");
     let principal=principal_for_auth(Some(&owner));
-    let original=db.read_orca_host_intent(&principal,
-        "orca_worker_launch_123456").unwrap().unwrap();
-    assert_eq!(original.state,"reserved");
-    assert!(original.dispatch_id.is_none());
+    assert!(db.read_orca_host_intent(&principal,
+        "orca_worker_launch_123456").unwrap().is_none(),
+        "Invalid Project-bound Plugin binding must be rejected before reserving a Host intent");
+    let replay=runtime.dispatch_with_auth(make(),Some(&owner)).await;
+    assert!(!replay.success);
+    assert_eq!(replay.output["error_kind"],"orca_host_worker_binding_invalid");
+    assert!(db.read_orca_host_intent(&principal,
+        "orca_worker_launch_123456").unwrap().is_none(),
+        "Same malformed request must never lock out a legitimate future launch");
+    // A legitimate pre-existing intent still needs exact recovery even when
+    // the original Plugin binding is no longer present.
+    let prepared=runtime.dispatch_with_auth(
+        ToolCall::PrepareOrcaHostWorkerContinuation{
+            project_id:project.clone(),
+            run_id:"run_launch".to_owned(),
+            coordinator_handle:"term_launch".to_owned(),
+            idempotency_key:"orca_worker_launch_123456".to_owned(),
+            worker_agent:"codex".to_owned(),
+            worktree:"test-worktree".to_owned(),
+            worker_spec:"Test only".to_owned(),
+        },Some(&owner)).await;
+    assert!(prepared.success,"{:?} {:?}",prepared.error,prepared.output);
+    assert_eq!(prepared.output["state"],"reserved");
     db.transition_orca_host_intent(&principal,"orca_worker_launch_123456",
         "reserved","worker_start_dispatched",None,None,None,None,
         chrono::Utc::now().timestamp()).unwrap();
-    let replay=runtime.dispatch_with_auth(make(),Some(&owner)).await;
-    assert!(replay.success,"{:?}",replay.error);
-    assert_eq!(replay.output["status"],"original_worker_launch_requires_reconciliation");
-    assert_eq!(replay.output["state"],"worker_start_dispatched");
-    assert_eq!(replay.output["watcher_job_started"],false);
+    let recovered=runtime.dispatch_with_auth(make(),Some(&owner)).await;
+    assert!(recovered.success,"{:?} {:?}",recovered.error,recovered.output);
+    assert_eq!(recovered.output["status"],"original_worker_launch_requires_reconciliation");
+    assert_eq!(recovered.output["state"],"worker_start_dispatched");
     assert_eq!(db.read_orca_host_intent(&principal,
         "orca_worker_launch_123456").unwrap().unwrap().state,
         "worker_start_dispatched");
+
 }
 #[test]
 fn start_orca_worker_with_host_intent_rejects_extra_command_in_schema() {
