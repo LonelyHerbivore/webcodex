@@ -31,6 +31,15 @@ fn verified_worker_start(
     let dispatch=result.get("dispatchId").or_else(||result.pointer("/dispatch/id"))?
         .as_str()?;
     let task=result.get("taskId").or_else(||result.pointer("/task/id"))?.as_str()?;
+    // If the original Orca receipt contains both top-level and nested
+    // Dispatch/Task identities, independently verify BOTH. Selecting the
+    // first via or_else would silently ignore a contradictory second value.
+    if [result.get("dispatchId"),result.pointer("/dispatch/id")]
+        .into_iter().flatten().any(|value|value.as_str()!=Some(dispatch)) ||
+       [result.get("taskId"),result.pointer("/task/id")]
+        .into_iter().flatten().any(|value|value.as_str()!=Some(task)) {
+        return None
+    }
     let host=payload.get("hostContinuation")?;
     if host.get("status")?.as_str()?!="requires_host_registration" ||
        host.get("runId")?.as_str()?!=run ||
@@ -281,6 +290,24 @@ mod tests {
         wrong_run["structuredContent"]["result"]["run"]["id"]=json!("run_original");
         assert_eq!(verified_worker_start(&wrong_run,"run_original","term_owned"),
             Some(("ctx_confirmed".to_string(),"task_confirmed".to_string(),None)));
+        // Both representations of Dispatch/Task in the original start
+        // receipt must be consistent even when the later Host plan matches.
+        let mut receipt_conflict=proof.clone();
+        receipt_conflict["structuredContent"]["result"]["dispatch"]["id"]=json!("ctx_foreign");
+        assert_eq!(verified_worker_start(&receipt_conflict,"run_original","term_owned"),None);
+        receipt_conflict["structuredContent"]["result"]["dispatch"]["id"]=json!("ctx_confirmed");
+        assert_eq!(verified_worker_start(&receipt_conflict,"run_original","term_owned"),
+            Some(("ctx_confirmed".to_owned(),"task_confirmed".to_owned(),None)));
+        receipt_conflict["structuredContent"]["result"]["task"]["id"]=json!("task_foreign");
+        assert_eq!(verified_worker_start(&receipt_conflict,"run_original","term_owned"),None);
+        receipt_conflict["structuredContent"]["result"]["task"]["id"]=json!("task_confirmed");
+        assert_eq!(verified_worker_start(&receipt_conflict,"run_original","term_owned"),
+            Some(("ctx_confirmed".to_owned(),"task_confirmed".to_owned(),None)));
+        receipt_conflict["structuredContent"]["result"]["dispatchId"]=json!("ctx_foreign");
+        assert_eq!(verified_worker_start(&receipt_conflict,"run_original","term_owned"),None);
+        receipt_conflict["structuredContent"]["result"]["dispatchId"]=json!("ctx_confirmed");
+        receipt_conflict["structuredContent"]["result"]["taskId"]=json!("task_foreign");
+        assert_eq!(verified_worker_start(&receipt_conflict,"run_original","term_owned"),None);
         let mut altered=proof.clone();
         altered["structuredContent"]["hostContinuation"]["taskId"]=json!("task_other");
         assert_eq!(verified_worker_start(&altered,"run_original","term_owned"),None);
