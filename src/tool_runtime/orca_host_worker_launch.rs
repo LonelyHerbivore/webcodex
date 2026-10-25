@@ -21,6 +21,13 @@ fn verified_worker_start(
     let payload=output.get("structuredContent")?;
     if payload.get("ok")?.as_bool()!=Some(true) {return None}
     let result=payload.get("result")?;
+    // The original Orca start receipt may include a Run. A conflicting
+    // returned Run is stronger negative evidence than a caller-supplied
+    // Host continuation plan and must not confirm the wrong Worker.
+    if [result.get("runId"),result.pointer("/run/id")]
+        .into_iter().flatten().any(|value|value.as_str()!=Some(run)) {
+        return None
+    }
     let dispatch=result.get("dispatchId").or_else(||result.pointer("/dispatch/id"))?
         .as_str()?;
     let task=result.get("taskId").or_else(||result.pointer("/task/id"))?.as_str()?;
@@ -265,6 +272,15 @@ mod tests {
         identified["structuredContent"]["hostContinuation"]["workerHandle"]=json!(42);
         assert_eq!(verified_worker_start(&identified,"run_original","term_owned"),None);
         assert_eq!(verified_worker_start(&proof,"run_foreign","term_owned"),None);
+        let mut wrong_run=proof.clone();
+        wrong_run["structuredContent"]["result"]["runId"]=json!("run_foreign");
+        assert_eq!(verified_worker_start(&wrong_run,"run_original","term_owned"),None);
+        wrong_run["structuredContent"]["result"]["runId"]=json!("run_original");
+        wrong_run["structuredContent"]["result"]["run"]["id"]=json!("run_foreign");
+        assert_eq!(verified_worker_start(&wrong_run,"run_original","term_owned"),None);
+        wrong_run["structuredContent"]["result"]["run"]["id"]=json!("run_original");
+        assert_eq!(verified_worker_start(&wrong_run,"run_original","term_owned"),
+            Some(("ctx_confirmed".to_string(),"task_confirmed".to_string(),None)));
         let mut altered=proof.clone();
         altered["structuredContent"]["hostContinuation"]["taskId"]=json!("task_other");
         assert_eq!(verified_worker_start(&altered,"run_original","term_owned"),None);
