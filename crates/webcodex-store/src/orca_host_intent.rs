@@ -222,7 +222,8 @@
              "UPDATE wc_orca_host_intents
               SET state=?4, dispatch_id=COALESCE(?5,dispatch_id),
                   task_id=COALESCE(?6,task_id),watch_key=COALESCE(?7,watch_key),
-                  job_id=COALESCE(?8,job_id),wait_id=COALESCE(?9,wait_id),updated_at=?10
+                  job_id=COALESCE(?8,job_id),wait_id=COALESCE(?9,wait_id),
+                  updated_at=MAX(updated_at,?10)
               WHERE owner_kind=?1 AND owner_digest=?2 AND idempotency_key=?3 AND state=?11",
              params![principal.kind,principal.digest,key,to,dispatch,task,
                  watch_key,job_id,wait_id,now,from]

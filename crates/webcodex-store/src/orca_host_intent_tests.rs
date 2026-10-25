@@ -106,6 +106,87 @@ fn missing_identity_and_skipped_phase_cannot_be_recorded() {
     let persisted=db.read_orca_host_intent(&owner,&request().idempotency_key).unwrap().unwrap();
     assert_eq!(persisted.state,"worker_start_dispatched");
 }
+
+#[test]
+fn host_intent_updated_at_is_monotonic_across_clock_rollback() {
+    let temp = tempdir().unwrap();
+    let db = Database::open(&temp.path().join("clock-rollback.db")).unwrap();
+    let owner = principal('a');
+    let req = request();
+    let first = db.reserve_orca_host_intent(&owner, &req, 10_000).unwrap();
+    assert_eq!(first.intent.created_at, 10_000);
+    let dispatched = db.transition_orca_host_intent(
+        &owner, &req.idempotency_key, "reserved", "worker_start_dispatched",
+        None, None, None, None, 10_100,
+    ).unwrap();
+    assert_eq!(dispatched.updated_at, 10_100);
+    // Time moved backwards between the durable dispatch fence and receipt.
+    // State may advance; the audit timestamp must never regress.
+    let confirmed = db.transition_orca_host_intent(
+        &owner, &req.idempotency_key,
+        "worker_start_dispatched", "worker_start_confirmed",
+        Some(("ctx_original", "task_original")), None, None, None, 9_950,
+    ).unwrap();
+    assert_eq!(confirmed.state, "worker_start_confirmed");
+    assert_eq!(confirmed.updated_at, 10_100);
+    assert_eq!(confirmed.created_at, 10_000);
+    let watcher = db.transition_orca_host_intent(
+        &owner, &req.idempotency_key,
+        "worker_start_confirmed", "watch_start_dispatched",
+        None, None, None, None, 10_050,
+    ).unwrap();
+    assert_eq!(watcher.updated_at, 10_100);
+    let replay = db.reserve_orca_host_intent(&owner, &req, 8_000).unwrap();
+    assert!(replay.replayed);
+    assert_eq!(replay.intent.updated_at, 10_100);
+    assert_eq!(replay.intent.created_at, 10_000);
+}
+
+#[test]
+fn concurrent_original_worker_dispatch_has_exactly_one_cas_winner() {
+    use std::sync::{Arc, Barrier};
+    let temp = tempdir().unwrap();
+    let db = Arc::new(Database::open(&temp.path().join("concurrent-worker.db")).unwrap());
+    let owner = principal('b');
+    let req = request();
+    db.reserve_orca_host_intent(&owner, &req, 1_000).unwrap();
+    const CALLERS: usize = 8;
+    let gate = Arc::new(Barrier::new(CALLERS));
+    let workers = (0..CALLERS).map(|_| {
+        let db = Arc::clone(&db);
+        let gate = Arc::clone(&gate);
+        let owner = owner.clone();
+        let key = req.idempotency_key.clone();
+        std::thread::spawn(move || {
+            gate.wait();
+            db.transition_orca_host_intent(
+                &owner, &key, "reserved", "worker_start_dispatched",
+                None, None, None, None, 1_500,
+            )
+        })
+    }).collect::<Vec<_>>();
+    let mut winners = 0;
+    let mut conflicts = 0;
+    for worker in workers {
+        match worker.join().expect("Concurrent test worker panicked") {
+            Ok(saved) => {
+                assert_eq!(saved.state, "worker_start_dispatched");
+                winners += 1;
+            }
+            Err(error) => {
+                assert_eq!(error.code, "orca_host_intent_state_conflict");
+                conflicts += 1;
+            }
+        }
+    }
+    assert_eq!(winners, 1, "Only one caller may cross the durable dispatch fence");
+    assert_eq!(conflicts, CALLERS - 1);
+    let persisted = db.read_orca_host_intent(&owner, &req.idempotency_key)
+        .unwrap().unwrap();
+    assert_eq!(persisted.state, "worker_start_dispatched");
+    assert!(persisted.dispatch_id.is_none(), "CAS does not assert Worker launch success");
+    assert!(persisted.task_id.is_none(), "CAS does not invent an Orca Task");
+}
 #[test]
 fn invalid_authority_shape_never_creates_an_intent() {
     let temp=tempdir().unwrap();
