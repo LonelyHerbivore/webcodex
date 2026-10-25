@@ -259,6 +259,8 @@ webcodex plugin list --runner special --plugin safe-delete
     -> {"action":"list","runner":"special","plugin":"safe-delete"}
 webcodex plugin describe --runner special --plugin safe-delete --tool safe_delete
     -> {"action":"describe","runner":"special","plugin":"safe-delete","tool":"safe_delete"}
+webcodex plugin describe --runner special --plugin safe-delete --tool safe_delete --project agent:special:test-project
+    -> {"action":"describe","runner":"special","plugin":"safe-delete","tool":"safe_delete","project":"agent:special:test-project"}
 webcodex plugin check --runner special --plugin safe-delete
     -> {"action":"check","runner":"special","plugin":"safe-delete"}
 webcodex plugin reload --runner special
@@ -304,6 +306,8 @@ webcodex plugin init ./my-plugin
     -> webcodex plugin list --runner special --plugin my-plugin --token-file /path/to/plugin-authoring-pat
     -> webcodex plugin describe --runner special --plugin my-plugin --tool echo --token-file /path/to/plugin-authoring-pat
 ```
+
+Project-bound Plugin tools require explicit `webcodex plugin describe --project <exact Project>`; the CLI forwards this only on describe, and the Server independently validates the Project root, Runner ownership and caller's `project:read` scope. The opaque returned binding is an observation, never authority, and invocation rechecks `project:write` and `plugin:invoke`. The CLI never infers Project from provider `cwd` or a previous call; omitting `--project` keeps existing unbound describe behavior. `--project` is invalid for list, check, reload.
 
 The identity and lifecycle rules are unchanged. Runner ids are exact; the CLI does
 not fuzzy-match or infer one from a provider/project. `list` never checks/reloads a

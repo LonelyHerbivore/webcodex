@@ -45,6 +45,8 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       - name: Check WebCodex Host and Store
         run: cargo check --locked -p webcodex -p webcodex-store --all-targets
+      - name: Verify CLI Project-bound Plugin describe parser and HTTP contract
+        run: cargo test --locked -p webcodex-cli plugin_
       - name: Run Store Job terminal tests
         run: cargo test --locked -p webcodex-store job_terminal_wait
       - name: Run Orca Host intent store tests

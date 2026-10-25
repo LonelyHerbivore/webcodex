@@ -372,7 +372,7 @@ Common options:\n{}",
 
 pub(crate) fn plugin_describe_usage() -> String {
     format!(
-        "Usage: webcodex plugin describe --runner RUNNER --plugin PLUGIN --tool TOOL [OPTIONS]\n\n\
+        "Usage: webcodex plugin describe --runner RUNNER --plugin PLUGIN --tool TOOL [--project PROJECT] [OPTIONS]\n\n\
 Mirror plugin_tool action=describe for one exact Runner/provider/tool. The Server returns\n\
 the current tool metadata and an opaque binding observation; the CLI does not cache it or\n\
 treat it as authorization. Requires plugin:inspect and does not perform an extra list.\n\n\
@@ -380,6 +380,7 @@ Identity options:\n\
   --runner RUNNER            Exact caller-visible Runner client_id (required)\n\
   --plugin PLUGIN            Exact provider id (required)\n\
   --tool TOOL                Exact provider-local tool name (required)\n\n\
+  --project PROJECT          Exact Project for projectBound tools (optional; reauthorized by Server)\n\n\
 Common options:\n{}",
         plugin_common_usage()
     )

@@ -32,6 +32,7 @@ pub(crate) struct PluginDescribeOptions {
     pub(crate) runner: String,
     pub(crate) plugin: String,
     pub(crate) tool: String,
+    pub(crate) project: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -92,12 +93,20 @@ impl PluginCommand {
                 }
                 params
             }
-            Self::Describe(opts) => json!({
-                "action": "describe",
-                "runner": opts.runner,
-                "plugin": opts.plugin,
-                "tool": opts.tool,
-            }),
+            Self::Describe(opts) => {
+                let mut params = json!({
+                    "action": "describe",
+                    "runner": opts.runner,
+                    "plugin": opts.plugin,
+                    "tool": opts.tool,
+                });
+                // Preserve old describe semantics when --project is omitted.
+                // Project-bound tools must be resolved and reauthorized by the Server.
+                if let Some(project) = opts.project.as_ref() {
+                    params["project"] = Value::String(project.clone());
+                }
+                params
+            },
             Self::Check(opts) => json!({
                 "action": "check",
                 "runner": opts.runner,
@@ -129,6 +138,7 @@ struct ParsedFlags {
     runner: Option<String>,
     plugin: Option<String>,
     tool: Option<String>,
+    project: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -136,6 +146,7 @@ struct AllowedIdentityFlags {
     runner: bool,
     plugin: bool,
     tool: bool,
+    project: bool,
 }
 
 pub(crate) fn parse_plugin_command(
@@ -147,21 +158,25 @@ pub(crate) fn parse_plugin_command(
             runner: true,
             plugin: true,
             tool: false,
+            project: false,
         },
         "describe" => AllowedIdentityFlags {
             runner: true,
             plugin: true,
             tool: true,
+            project: true,
         },
         "check" => AllowedIdentityFlags {
             runner: true,
             plugin: true,
             tool: false,
+            project: false,
         },
         "reload" => AllowedIdentityFlags {
             runner: true,
             plugin: false,
             tool: false,
+            project: false,
         },
         other => return Err(format!("unknown plugin subcommand: {other}")),
     };
@@ -183,6 +198,7 @@ pub(crate) fn parse_plugin_command(
             runner: required_identity(flags.runner, "--runner", command)?,
             plugin: required_identity(flags.plugin, "--plugin", command)?,
             tool: required_identity(flags.tool, "--tool", command)?,
+            project: flags.project.map(validate_exact_project).transpose()?,
         })),
         "check" => Ok(PluginCommand::Check(PluginCheckOptions {
             common,
@@ -253,6 +269,10 @@ fn parse_flags(
                 let value = flag_value(args, &mut index, arg)?;
                 set_once(&mut flags.tool, value, arg)?;
             }
+            "--project" if allowed.project => {
+                let value = flag_value(args, &mut index, arg)?;
+                set_once(&mut flags.project, value, arg)?;
+            }
             other => return Err(format!("unknown plugin {command} flag: {other}")),
         }
         index += 1;
@@ -314,6 +334,16 @@ fn set_path_once(target: &mut Option<PathBuf>, value: String, flag: &str) -> Res
     }
     *target = Some(path);
     Ok(())
+}
+
+fn validate_exact_project(project: String) -> Result<String, String> {
+    if project.trim().is_empty()
+        || project.len() > 512
+        || project.chars().any(char::is_control)
+    {
+        return Err("--project must be a bounded exact Project (1..512 bytes, no control characters)".to_string());
+    }
+    Ok(project)
 }
 
 fn required_identity(value: Option<String>, flag: &str, command: &str) -> Result<String, String> {

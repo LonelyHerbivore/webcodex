@@ -545,6 +545,7 @@ fn plugin_command_help_documents_exact_identity_and_reload_scope() {
                 "--plugin PLUGIN",
                 "--tool TOOL",
                 "plugin:inspect",
+                "--project PROJECT",
             ],
         ),
         (
@@ -630,6 +631,78 @@ fn plugin_parser_accepts_only_canonical_identity_shapes() {
         }
         other => panic!("unexpected plugin describe parse: {other:?}"),
     }
+}
+
+
+#[test]
+fn plugin_describe_project_flag_requires_exact_bounded_project_and_stays_describe_only() {
+    let exact = "agent:ticket02-isolated-runner:test-project";
+    let parsed = parse_plugin_command("describe", &[
+        "--runner".into(), "ticket02-isolated-runner".into(),
+        "--plugin".into(), "orca".into(),
+        "--tool".into(), "orca_start_worker_host_bound".into(),
+        "--project".into(), exact.into(),
+    ]).unwrap();
+    match parsed {
+        PluginCommand::Describe(opts) => {
+            assert_eq!(opts.project.as_deref(), Some(exact));
+            assert_eq!(opts.runner, "ticket02-isolated-runner");
+        }
+        other => panic!("Unexpected Project-bound describe: {other:?}"),
+    }
+    let args = ["--runner","special","--plugin","orca","--tool","worker"];
+    match parse_plugin_command("describe",
+        &args.iter().map(|v|v.to_string()).collect::<Vec<_>>()).unwrap() {
+        PluginCommand::Describe(opts) => assert_eq!(opts.project,None),
+        other => panic!("Unexpected backwards-compatible describe: {other:?}"),
+    }
+    let cases = [
+        (vec!["--runner","special","--plugin","orca","--tool","worker",
+              "--project"," ","--json"], "--project"),
+        (vec!["--runner","special","--plugin","orca","--tool","worker",
+              "--project","agent:bad\nproject"], "--project"),
+        (vec!["--runner","special","--plugin","orca","--tool","worker",
+              "--project","one","--project","two"], "--project may be specified only once"),
+        (vec!["--runner","special","--plugin","orca","--tool","worker",
+              "--project"], "--project requires a value"),
+        (vec!["--runner","special","--plugin","orca","--tool","worker",
+              "--project",""], "--project cannot be empty"),
+        (vec!["--runner","special","--project","test"], "unknown plugin list flag: --project"),
+    ];
+    for (argv,needle) in cases {
+        let command=if argv.last()==Some(&"test") {"list"} else {"describe"};
+        let error=parse_plugin_command(command,&argv.iter().map(|x|x.to_string())
+            .collect::<Vec<_>>()).unwrap_err();
+        assert!(error.contains(needle),"argv={argv:?} error={error}");
+    }
+    let oversized="x".repeat(513);
+    let error=parse_plugin_command("describe",&[
+        "--runner".to_owned(),"special".to_owned(),"--plugin".to_owned(),"orca".to_owned(),
+        "--tool".to_owned(),"worker".to_owned(),"--project".to_owned(),oversized
+    ]).unwrap_err();
+    assert!(error.contains("--project"),"{error}");
+    for command in ["check","reload"] {
+        let error=parse_plugin_command(command,&["--runner".into(),"special".into(),
+            "--project".into(),"agent:test:one".into()]).unwrap_err();
+        assert!(error.contains(&format!("unknown plugin {command} flag: --project")));
+    }
+}
+
+#[tokio::test]
+async fn plugin_describe_project_scoped_request_preserves_exact_project_without_extra_calls() {
+    let project="agent:ticket02-isolated-runner:test-project";
+    let (result,requests)=run_once("describe",&[
+        "--runner","ticket02-isolated-runner","--plugin","orca",
+        "--tool","orca_start_worker_host_bound","--project",project
+    ],runtime_success(json!({
+        "runner":"ticket02-isolated-runner","plugin":"orca",
+        "tool":safe_delete_tool(),"binding":"wc_pbind_mock_only"
+    })),true).await;
+    assert_eq!(result.unwrap().exit_code,0);
+    assert_eq!(requests.len(),1);
+    assert_eq!(request_body(&requests[0]),json!({"tool":"plugin_tool",
+        "params":{"action":"describe","runner":"ticket02-isolated-runner",
+          "plugin":"orca","tool":"orca_start_worker_host_bound","project":project}}));
 }
 
 #[test]
