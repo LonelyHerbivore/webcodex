@@ -1043,8 +1043,52 @@ async fn start_orca_worker_with_host_intent_invalid_binding_does_not_consume_int
     assert_eq!(db.read_orca_host_intent(&principal,
         "orca_worker_launch_123456").unwrap().unwrap().state,
         "worker_start_dispatched");
+    let changed=runtime.dispatch_with_auth(
+        ToolCall::StartOrcaWorkerWithHostIntent {
+            project_id:project.clone(),
+            run_id:"run_launch".to_owned(),
+            coordinator_handle:"term_launch".to_owned(),
+            idempotency_key:"orca_worker_launch_123456".to_owned(),
+            worker_agent:"codex".to_owned(),
+            worktree:"test-worktree".to_owned(),
+            worker_spec:"MUTATED worker spec".to_owned(),
+            plugin_binding:"wc_pbind_NON_EXISTENT".to_owned(),
+        },Some(&owner)).await;
+    assert!(!changed.success);
+    assert_eq!(changed.output["error_kind"],"orca_host_intent_conflict");
+    assert_eq!(db.read_orca_host_intent(&principal,
+        "orca_worker_launch_123456").unwrap().unwrap().state,
+        "worker_start_dispatched");
 
 }
+#[tokio::test]
+async fn start_orca_worker_with_host_intent_unmanaged_owner_never_reserves() {
+    let (_temp,runtime,db)=attention_runtime().await;
+    let mut unnamed=crate::auth::AuthContext::new(crate::auth::AuthKind::ApiToken);
+    for scope in [crate::auth::SCOPE_JOB_RUN,
+        crate::auth::SCOPE_PROJECT_WRITE,crate::auth::SCOPE_PLUGIN_INVOKE] {
+        unnamed.scopes.push(scope.to_owned());
+    }
+    assert!(crate::job_terminal_attention::managed_orca_host_principal_for_auth(
+        Some(&unnamed)).is_none());
+    let key="orca_worker_unmanaged_owner_123";
+    let denied=runtime.dispatch_with_auth(
+        ToolCall::StartOrcaWorkerWithHostIntent {
+            project_id:"agent:orca-launch:project-launch".to_owned(),
+            run_id:"run_launch".to_owned(),
+            coordinator_handle:"term_launch".to_owned(),
+            idempotency_key:key.to_owned(),
+            worker_agent:"codex".to_owned(),
+            worktree:"test-worktree".to_owned(),
+            worker_spec:"Test only".to_owned(),
+            plugin_binding:"wc_pbind_NON_EXISTENT".to_owned(),
+        },Some(&unnamed)).await;
+    assert!(!denied.success);
+    let principal=principal_for_auth(Some(&unnamed));
+    assert!(db.read_orca_host_intent(&principal,key).unwrap().is_none(),
+        "Unmanaged owner must not persist a new Host Worker intent");
+}
+
 #[test]
 fn start_orca_worker_with_host_intent_rejects_extra_command_in_schema() {
     let value=json!({

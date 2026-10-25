@@ -4,7 +4,7 @@
 //! or implicit Host Job/Wait registration.
 use super::{ToolResult,ToolRuntime};
 use crate::auth::AuthContext;
-use crate::job_terminal_attention::principal_for_auth;
+use crate::job_terminal_attention::managed_orca_host_principal_for_auth;
 use serde_json::{json,Value};
 use webcodex_tool_contracts::{PluginToolAction,PluginToolCall};
 
@@ -17,7 +17,7 @@ fn verified_worker_start(
     output:&Value,
     run:&str,
     coordinator:&str,
-) -> Option<(String,String)> {
+) -> Option<(String,String,Option<String>)> {
     let payload=output.get("structuredContent")?;
     if payload.get("ok")?.as_bool()!=Some(true) {return None}
     let result=payload.get("result")?;
@@ -32,10 +32,42 @@ fn verified_worker_start(
        host.get("taskId")?.as_str()?!=task ||
        !exact_token(dispatch,"ctx_") || !exact_token(task,"task_")
        {return None}
-    Some((dispatch.to_owned(),task.to_owned()))
+    let worker_handle=match host.get("workerHandle") {
+        None|Some(Value::Null)=>None,
+        Some(Value::String(handle)) if exact_token(handle,"term_")=>Some(handle.clone()),
+        _=>return None,
+    };
+    Some((dispatch.to_owned(),task.to_owned(),worker_handle))
 }
 
 impl ToolRuntime {
+    /// Read-only Project/binding check used before reservation and again
+    /// immediately before the external dispatch CAS. Never caches authority.
+    async fn verify_orca_host_worker_binding(
+        &self,
+        project_id:&str,
+        plugin_binding:&str,
+        auth:Option<&AuthContext>,
+        state:&str,
+    ) -> Result<(),ToolResult> {
+        let resolved=match self.resolve_project_input_for_auth(project_id,auth).await {
+            Ok(value) if value.resolved_id==project_id=>value,
+            _=>return Err(ToolResult::err_with_output(
+                "Original Runner Project authorization unavailable",
+                json!({"error_kind":"orca_host_intent_project_unauthorized",
+                    "state":state,"worker_started":false,"host_wake_verified":false})))
+        };
+        if !crate::plugin_gateway::is_exact_orca_worker_start_binding(
+            self,plugin_binding,project_id,&resolved.config.client_id
+        ) {
+            return Err(ToolResult::err_with_output(
+                "A pre-described Project-bound exact orca_start_worker binding is required",
+                json!({"error_kind":"orca_host_worker_binding_invalid",
+                    "state":state,"worker_started":false,"host_wake_verified":false})))
+        }
+        Ok(())
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub(crate) async fn start_orca_worker_with_host_intent(
         &self,
@@ -67,7 +99,12 @@ impl ToolRuntime {
                 return ToolResult::err_with_output("Host intent Store unavailable",
                     json!({"error_kind":"orca_host_intent_store_unavailable"}))
             };
-            let principal=principal_for_auth(auth);
+            let Some(principal)=managed_orca_host_principal_for_auth(auth) else {
+                return ToolResult::err_with_output(
+                    "Managed Host owner with stable identity required",
+                    json!({"error_kind":"orca_host_intent_unauthorized",
+                        "worker_started":false,"host_wake_verified":false}))
+            };
             let existing=match store.read_orca_host_intent(&principal,&idempotency_key) {
                 Ok(record)=>record.is_some(),
                 Err(_)=>return ToolResult::err_with_output(
@@ -77,21 +114,9 @@ impl ToolRuntime {
                         "worker_started":null,"host_wake_verified":false}))
             };
             if !existing {
-                let resolved=match self.resolve_project_input_for_auth(&project_id,auth).await {
-                    Ok(value) if value.resolved_id==project_id=>value,
-                    _=>return ToolResult::err_with_output(
-                        "Original Runner Project authorization unavailable",
-                        json!({"error_kind":"orca_host_intent_project_unauthorized"}))
-                };
-                if !crate::plugin_gateway::is_exact_orca_worker_start_binding(
-                    self,&plugin_binding,&project_id,&resolved.config.client_id
-                ) {
-                    return ToolResult::err_with_output(
-                        "A pre-described Project-bound exact orca_start_worker binding is required",
-                        json!({"error_kind":"orca_host_worker_binding_invalid",
-                            "state":"unrecorded","worker_started":false,
-                            "host_wake_verified":false}))
-                }
+                if let Err(denial)=self.verify_orca_host_worker_binding(
+                    &project_id,&plugin_binding,auth,"unrecorded"
+                ).await {return denial}
             }
         }
         // The existing preparation function is the single owner of identity,
@@ -118,23 +143,18 @@ impl ToolRuntime {
             return ToolResult::err_with_output("Host intent Store unavailable",
                 json!({"error_kind":"orca_host_intent_store_unavailable"}))
         };
-        let resolved=match self.resolve_project_input_for_auth(&project_id,auth).await {
-            Ok(value) if value.resolved_id==project_id=>value,
-            _=>return ToolResult::err_with_output("Original Runner Project authorization changed",
-                json!({"error_kind":"orca_host_intent_project_unauthorized"}))
-        };
-        // An arbitrary Plugin binding, or an unbound cross-project Orca
-        // invocation, must NEVER be able to inherit the Host intent authority.
-        if !crate::plugin_gateway::is_exact_orca_worker_start_binding(
-            self,&plugin_binding,&project_id,&resolved.config.client_id
-        ) {
+        // Revalidate immediately before CAS: a previously described Plugin
+        // binding can expire or change while an intent is being reserved.
+        if let Err(denial)=self.verify_orca_host_worker_binding(
+            &project_id,&plugin_binding,auth,"reserved"
+        ).await {return denial}
+        let Some(principal)=managed_orca_host_principal_for_auth(auth) else {
             return ToolResult::err_with_output(
-                "A pre-described Project-bound exact orca_start_worker binding is required",
-                json!({"error_kind":"orca_host_worker_binding_invalid",
-                  "state":"reserved","worker_started":false})
-            );
-        }
-        let principal=principal_for_auth(auth);
+                "Managed Host owner changed during Worker launch",
+                json!({"error_kind":"orca_host_intent_unauthorized",
+                    "status":"original_worker_launch_requires_reconciliation",
+                    "worker_started":false,"host_wake_verified":false}))
+        };
         let now=chrono::Utc::now().timestamp();
         if let Err(error)=db.transition_orca_host_intent(
             &principal,&idempotency_key,"reserved","worker_start_dispatched",
@@ -179,7 +199,7 @@ impl ToolRuntime {
                 }),
             );
         }
-        let Some((dispatch,task))=verified_worker_start(
+        let Some((dispatch,task,worker_handle))=verified_worker_start(
             &executed.output,&run_id,&coordinator_handle
         ) else {
             return ToolResult::err_with_output(
@@ -199,7 +219,12 @@ impl ToolRuntime {
                 "status":"original_orca_worker_launch_confirmed",
                 "state":"worker_start_confirmed",
                 "project_id":project_id,"run_id":run_id,
+                "coordinator_handle":coordinator_handle,
+                "idempotency_key":idempotency_key,
+                "worker_agent":worker_agent,
                 "dispatch_id":dispatch,"task_id":task,
+                "worker_handle_verified":worker_handle.is_some(),
+                "worker_handle":worker_handle,
                 "worker_started":true,
                 "watcher_job_started":false,"host_wake_verified":false,
                 "replayed":false,
@@ -229,7 +254,16 @@ mod tests {
                 "dispatchId":"ctx_confirmed","taskId":"task_confirmed"}
         }});
         assert_eq!(verified_worker_start(&proof,"run_original","term_owned"),
-            Some(("ctx_confirmed".to_string(),"task_confirmed".to_string())));
+            Some(("ctx_confirmed".to_string(),"task_confirmed".to_string(),None)));
+        let mut identified=proof.clone();
+        identified["structuredContent"]["hostContinuation"]["workerHandle"]=json!("term_worker123");
+        assert_eq!(verified_worker_start(&identified,"run_original","term_owned"),
+            Some(("ctx_confirmed".to_string(),"task_confirmed".to_string(),
+                Some("term_worker123".to_string()))));
+        identified["structuredContent"]["hostContinuation"]["workerHandle"]=json!("invented_worker");
+        assert_eq!(verified_worker_start(&identified,"run_original","term_owned"),None);
+        identified["structuredContent"]["hostContinuation"]["workerHandle"]=json!(42);
+        assert_eq!(verified_worker_start(&identified,"run_original","term_owned"),None);
         assert_eq!(verified_worker_start(&proof,"run_foreign","term_owned"),None);
         let mut altered=proof.clone();
         altered["structuredContent"]["hostContinuation"]["taskId"]=json!("task_other");
